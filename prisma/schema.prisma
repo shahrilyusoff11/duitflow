@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum TransactionSource {
+  WEB
+  TELEGRAM
+}
+
+enum TelegramUpdateStatus {
+  RECEIVED
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum PendingActionKind {
+  PROPOSAL
+  CLARIFICATION
+}
+
+model User {
+  id               String   @id @default(cuid())
+  name             String
+  email            String   @unique
+  emailVerified    Boolean  @default(false)
+  image            String?
+  aiParsingEnabled Boolean  @default(false)
+  isDemo           Boolean  @default(false)
+  createdAt        DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @db.Timestamptz(3)
+
+  categories         Category[]
+  transactions       Transaction[]
+  budgets            Budget[]
+  telegramConnection TelegramConnection?
+  telegramLinkTokens TelegramLinkToken[]
+  pendingActions     PendingTelegramAction[]
+  sessions           Session[]
+  accounts           Account[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+  ipAddress String?
+  userAgent String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  userId                String
+  accountId             String
+  providerId            String
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime? @db.Timestamptz(3)
+  refreshTokenExpiresAt DateTime? @db.Timestamptz(3)
+  scope                 String?
+  createdAt             DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime  @updatedAt @db.Timestamptz(3)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+// Required for single-use OAuth state/PKCE, not an email/magic-link feature.
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime @db.Timestamptz(3)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([identifier])
+  @@index([expiresAt])
+}
+
+model Category {
+  id              String          @id @default(cuid())
+  userId          String
+  name            String          @db.VarChar(80)
+  transactionType TransactionType
+  createdAt       DateTime        @default(now()) @db.Timestamptz(3)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions    Transaction[]
+  budgets         Budget[]
+
+  @@unique([userId, name, transactionType])
+  // Composite keys enforce category ownership and type in the database too.
+  @@unique([id, userId, transactionType])
+}
+
+model Transaction {
+  id          String            @id @default(cuid())
+  userId      String
+  categoryId  String
+  type        TransactionType
+  amount      Decimal           @db.Decimal(12, 2)
+  description String            @db.VarChar(500)
+  occurredOn  DateTime          @db.Date
+  source      TransactionSource @default(WEB)
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime          @updatedAt @db.Timestamptz(3)
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category    Category          @relation(fields: [categoryId, userId, type], references: [id, userId, transactionType], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([userId, occurredOn])
+  @@index([userId, categoryId, occurredOn])
+}
+
+model Budget {
+  id           String          @id @default(cuid())
+  userId       String
+  categoryId   String
+  categoryType TransactionType @default(EXPENSE)
+  year         Int
+  month        Int
+  limitAmount  Decimal         @db.Decimal(12, 2)
+  warningAt    Int             @default(80)
+  createdAt    DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime        @updatedAt @db.Timestamptz(3)
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category     Category        @relation(fields: [categoryId, userId, categoryType], references: [id, userId, transactionType], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([userId, categoryId, year, month])
+  @@index([userId, year, month])
+}
+
+model TelegramConnection {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  telegramUserId String   @unique @db.VarChar(20)
+  linkedAt       DateTime @default(now()) @db.Timestamptz(3)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TelegramLinkToken {
+  id          String    @id @default(cuid())
+  userId      String
+  hashedToken String    @unique @db.Char(64)
+  expiresAt   DateTime  @db.Timestamptz(3)
+  consumedAt  DateTime? @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(3)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model TelegramUpdate {
+  telegramUpdateId BigInt               @id
+  status           TelegramUpdateStatus @default(RECEIVED)
+  attempts         Int                  @default(0)
+  lockedAt         DateTime?            @db.Timestamptz(3)
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @db.Timestamptz(3)
+
+  @@index([status, lockedAt])
+  @@index([updatedAt])
+}
+
+model PendingTelegramAction {
+  id             String            @id @default(uuid()) @db.Uuid
+  userId         String
+  telegramUserId String            @db.VarChar(20)
+  kind           PendingActionKind
+  payload        Json              @db.JsonB
+  expiresAt      DateTime          @db.Timestamptz(3)
+  consumedAt     DateTime?         @db.Timestamptz(3)
+  createdAt      DateTime          @default(now()) @db.Timestamptz(3)
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, consumedAt, expiresAt])
+  @@index([expiresAt])
+}
+
+// key is a hash of user/IP identity. Never persist raw IPs or message text here.
+model RateLimitEvent {
+  id        String   @id @default(cuid())
+  key       String   @db.VarChar(64)
+  bucket    String   @db.VarChar(40)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([key, bucket, createdAt])
+  @@index([createdAt])
+}
