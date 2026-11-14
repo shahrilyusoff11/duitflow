@@ -6,7 +6,8 @@ production migrations are complete and live verification passed.** See
 [NEON_SETUP.md](NEON_SETUP.md) for the exact change record and proof.
 The owner has since configured GitHub OAuth, and real sign-in, sign-out,
 protected-page redirect and re-login have also passed. The instructions below
-are retained for a new checkout/environment. Remote CI still needs a GitHub repo.
+are retained for a new checkout/environment. The repository is now on GitHub and
+[CI has passed](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318).
 Never paste provider secrets into chat or a tracked file.
 
 ## 1. Prepare the local environment

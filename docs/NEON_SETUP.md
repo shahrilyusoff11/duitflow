@@ -3,7 +3,8 @@
 **Subsequent update:** GitHub credentials have now been configured locally.
 Real login, logout, protected-page redirect and re-login passed in Chrome. The
 pending-OAuth statements and command output below describe the earlier Neon
-setup checkpoint; current acceptance status is in STATUS.md. Remote CI is pending.
+setup checkpoint; current acceptance status is in STATUS.md. The first remote
+[CI run has since passed](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318).
 
 ## Result
 

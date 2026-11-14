@@ -1,15 +1,16 @@
 # Implementation status — 15 November 2026
 
-**Neon and real GitHub OAuth verification pass. The first remote GitHub Actions
-run remains pending; no Git remote is configured. Phase 2 has not started.**
+**Phase 1 is complete.** Real OAuth, Neon, local checks and
+[GitHub CI](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318)
+pass. Phase 2 has not started.
 
 See [the full Neon setup/change record](NEON_SETUP.md).
 
 The owner approved Better Auth + GitHub-only OAuth + database sessions in chat.
 No repeat approval of that approach is needed. The owner also authorized Neon
 CLI setup; the existing Free production branch is connected and migrated.
-GitHub OAuth credentials are now configured in ignored .env. GitHub remote,
-Vercel, Telegram and Gemini remain unset.
+GitHub OAuth credentials are configured in ignored .env. The owner pushed the
+repository to GitHub and remote CI passed. Vercel, Telegram and Gemini remain unset.
 
 ## Implemented
 
@@ -37,7 +38,7 @@ Vercel, Telegram and Gemini remain unset.
   AGENTS.md, practical README, technical decisions and exact provider setup guide.
 - [x] Ignored .env created with a generated auth secret, never printed. Neon variables
   were pulled into that existing file; GitHub credentials are now configured locally and verified.
-- [x] Local Git repository on main; no commits or remote created.
+- [x] Repository pushed to github.com/shahrilyusoff11/duitflow on main.
 - [x] CI defined for Node 24, disposable PostgreSQL migration, checks and browsers.
 
 ## Actual local results
@@ -97,7 +98,7 @@ npm ci completed successfully. No user source files or credentials were removed.
 - [x] Reviewed migrations applied to real Neon production; schema up to date.
 - [x] Browser -> app -> Prisma -> live Neon readiness check returns HTTP 200.
 - [x] Real browser GitHub sign-in, own-data display, sign-out, protected redirect and re-login verified.
-- [ ] GitHub Actions run on a configured remote (workflow is prepared only).
+- [x] GitHub Actions run 43630396318 completed successfully on the pushed commit.
 
 Live Neon checks now verify connectivity/TLS, pooled Prisma round-trips and
 migrations. Autosuspend behavior was not load-tested. Automated GitHub fixtures remain separate from the now-successful real OAuth
@@ -114,11 +115,22 @@ restored the same account/categories. The browser was left signed in.
 No credentials, cookies, tokens, names or email addresses are included in this
 record. No application change or new test account was needed for these checks.
 
-## Remaining Phase 1 item
+## Remote CI evidence and Phase 1 completion
 
-The CI workflow exists and local checks pass, but no Git remote, initial commit,
-push or GitHub Actions run exists. A repository destination/visibility has not
-been chosen. Do not claim remote CI passed.
+Repository: https://github.com/shahrilyusoff11/duitflow
+
+Commit: 108874011e8af3f8fe733297b650ef3ee20749ba
+
+Run: https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318
+
+Conclusion: **success**.
+
+The foundation job passed installation, schema validation, PostgreSQL migrations,
+lint, typecheck, unit/integration tests, production build and browser tests.
+The GitHub connector confirmed the completed run and every required step.
+
+All Phase 1 acceptance checks now pass. Completion/status documents were updated
+locally after this verified run; no application or workflow code changed.
 
 Phases 2–5 and Stretch remain unstarted. Transaction CRUD, financial aggregates,
 monthly budgets, Telegram, AI, golden-set fixtures and demo/deployment acceptance

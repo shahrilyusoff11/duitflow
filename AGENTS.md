@@ -14,7 +14,9 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
 
 ## Current scope and approval gates
 
-- Phase 1 is in progress. The owner approved Better Auth + GitHub-only OAuth +
+- Phase 1 is complete: live OAuth/Neon checks and GitHub CI passed on commit
+  108874011e8af3f8fe733297b650ef3ee20749ba (run 43630396318). Phase 2 has not
+  started; begin it only when requested. The owner approved Better Auth + GitHub-only OAuth +
   PostgreSQL database sessions in chat on 15 November 2026. Implement this scope
   without asking for the same approval again. See `docs/AUTH_PROPOSAL.md`.
 - Neon setup via CLI is explicitly authorized: org-withered-mountain-16883150,

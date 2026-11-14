@@ -115,6 +115,15 @@ The same ten personal categories remained, and AI was off. No new authorization
 prompt needed automation; the user's existing GitHub consent was reused.
 The browser was left signed in. No name, email, secret or token is recorded here.
 
-No Git remote exists and all source files remain uncommitted. The first remote
-GitHub Actions execution is the remaining Phase 1 release check. Do not claim
-it has run or publish to an invented repository/visibility choice.
+At this checkpoint no remote existed; the owner subsequently selected and
+pushed the repository as recorded below.
+
+## 2026-11-15 — Phase 1 complete
+
+The owner pushed main to https://github.com/shahrilyusoff11/duitflow, commit
+108874011e8af3f8fe733297b650ef3ee20749ba. GitHub Actions run 43630396318 completed
+with success. Its foundation job passed npm ci, schema validation, PostgreSQL
+migrations, lint, typecheck, unit/integration tests, build and browser tests.
+The result was read from the GitHub connector, including per-step conclusions.
+Together with the already verified real GitHub OAuth and Neon flows, this closes
+Phase 1. Phase 2 remains unstarted.

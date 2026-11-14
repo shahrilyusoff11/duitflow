@@ -6,7 +6,9 @@ A personal finance MVP for Malaysia, built incrementally from
 [the specification](DUITFLOW_CODEX_SPEC.md). UI language is Bahasa Melayu,
 currency is MYR, and financial dates use Asia/Kuala_Lumpur.
 
-**Status: Neon and real GitHub sign-in/out are verified; the first remote CI run is pending.**
+**Status: Phase 1 complete.** Neon, real GitHub sign-in/out, local checks and
+[GitHub CI](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318)
+all pass. Phase 2 has not started.
 The app includes the approved Better Auth GitHub-only OAuth, database sessions,
 protected account dashboard, atomic per-user category seeding, scoped profile
 access, migrations and CI. Finance CRUD, aggregates, budgets, Telegram and AI are
@@ -63,7 +65,7 @@ Those steps, Neon migrations, and real sign-in/out verification are now complete
 in this workspace. The instructions remain useful for a new environment.
 No fake session, test endpoint, password login or account-linking endpoint exists
 in the application. Test launchers and fixtures live outside src.
-The first GitHub Actions run remains pending because no remote is configured.
+The repository is pushed to GitHub and its first CI run passed every check.
 
 ```sh
 npm run setup:init
@@ -175,11 +177,11 @@ TIMESTAMPTZ. No balances are fabricated and AI never writes SQL or saves records
 
 ## CI and verification
 
-The workflow is prepared for GitHub Actions but has not been run on GitHub.
+The workflow has passed on GitHub Actions for the Phase 1 commit.
 It uses Node 24, an ephemeral PostgreSQL 17 service, reviewed
 `prisma migrate deploy`, lint, typecheck, Vitest, build and Chromium smoke tests.
-No production credentials are needed. The repository has no configured GitHub
-remote or deployment. Local evidence and limitations are in
+No production credentials are needed. The repository is hosted at https://github.com/shahrilyusoff11/duitflow.
+No frontend deployment has been created. Local evidence and limitations are in
 [STATUS.md](docs/STATUS.md).
 
 ## Free-tier deployment plan (not performed)
@@ -224,5 +226,4 @@ This is an unfinished portfolio MVP, not reviewed for real financial data.
 If anyone besides the owner uses it, assess Malaysia's PDPA (Personal Data
 Protection Act 2010) obligations and obtain a proper security/privacy review.
 It offers no banking connection, financial advice, payment or transfer capability.
-#   d u i t f l o w  
- 
+# duitflow
