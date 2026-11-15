@@ -6,8 +6,9 @@ polish/demo/deployment preparation on 15 November 2026 and requires approval
 before provider/dashboard setup or publishing. That deployment/setup approval
 was received on 15 November 2026; release work is now in progress. Gemini
 credentials and live calls remain unapproved. Stop before Stretch. No paid
-service, new dependency, schema
-migration, hosting deployment or live Neon write was performed in Phase 5.
+service, new dependency, schema migration or live Neon write was performed in
+Phase 5. The approved Vercel Hobby project has been created and is being
+configured; no successful hosted release or live bot result is claimed yet.
 
 ## Phase 5 polish and deployment preparation — local work complete
 
@@ -30,7 +31,9 @@ migration, hosting deployment or live Neon write was performed in Phase 5.
 - [x] Auth, Neon configuration, finance, Telegram and optional AI regression
   suites pass. All three reviewed migrations and signup trigger are unchanged.
 - [x] Owner approves provider/dashboard setup and publishing for Vercel Hobby,
-  production OAuth and Telegram; no dashboard actions have been performed.
+  production OAuth and Telegram. The Hobby project `duitflow` exists in
+  `SY` / `sy-74fc`; configuration is in progress. Its intended canonical origin
+  is `https://duitflow-lyart.vercel.app`, not yet verified as a live release.
 - [ ] Free public HTTPS deployment, registered secret-protected production
   webhook and actual sign-in → web transaction → link → confirmed Telegram
   expense verified. No live demo/bot URL is claimed.
@@ -43,14 +46,46 @@ Executed on Windows / Node 26.11.1, npm 11.20.0:
 | npm run setup:check | Passed; format only, no values/connectivity claim |
 | npm run lint | Passed, no warnings |
 | npm run typecheck | Passed |
-| npm test | **315 passed** across 15 files, including **45/45 mocked AI golden cases** |
+| npm test | **316 passed** across 15 files after the CI fixture repair, including **45/45 mocked AI golden cases** |
 | npm run build | Passed; `/demo` and robots static, account/API routes dynamic |
 | npx playwright install chromium | Passed |
 | npm run test:e2e | **28 passed**, desktop/mobile Chromium, 6 workers |
 | Final demo CSS/screenshot refinement | Rebuild and scoped ESLint passed; **2/2 demo browser checks** passed again |
 | npm audit --omit=dev | **0 vulnerabilities** |
+| npm run db:status (existing Neon, read-only) | Passed, exit 0; **3 migrations found**, database schema up to date; no migration applied or data written |
 | Targeted secret scan | No matches in current non-ignored source or 162 local Git-history blobs; `.env`/generated client ignored |
 | git diff --check | Passed |
+
+### Phase 5 release CI and fixture repair
+
+The initial release commit `b1df6a3125788a40caa2f99c06a0934a05a109fd` was pushed
+to `main`. [CI run 43700269014](https://github.com/shahrilyusoff11/duitflow/actions/runs/43700269014)
+completed with **failure**: install, schema validation, disposable PostgreSQL
+migrations, lint and typecheck passed; `npm test` reported **314 passed, 1 failed**
+across 15 files. Production build and browser checks were skipped. The failed
+finance budget test received `Failed to get session`, caused by `Connection
+terminated unexpectedly`, rather than an incorrect financial assertion.
+
+The disposable integration socket allowed only one TCP connection. `pg` retires
+a pooled connection after expected SQL constraint errors, and a replacement can
+arrive before the old socket's deferred close cleanup finishes. The fixture now
+allows two socket slots for that overlap while the Prisma pool remains limited
+to **one** connection, preserving serialized PGlite work. Production code,
+authorization, connection configuration and browser DB URL overrides are
+unchanged. No assertion or authorization test was removed.
+
+A new regression performs twenty expected duplicate-budget failures, each
+followed by a real owner-session read and cross-user denial, then verifies that
+session revocation still denies access. The timing-dependent CI failure was not
+reproduced deterministically on Windows. After the repair, targeted auth/finance
+tests passed **22/22**; lint, typecheck, the full **316-test** suite, production
+build and all **28** desktop/mobile browser tests passed locally. The repair
+has not yet been verified by a subsequent remote CI run.
+
+The separately authorized, read-only `npm run db:status` against the existing
+Neon configuration exited 0 and reported three migrations with the schema up to
+date. No reset, new migration, schema change or synthetic data write was run by
+that check.
 
 The production browser suite now verifies precise public demo values, no forms
 or mutation requests, keyboard navigation, no horizontal overflow, same-browser
@@ -62,9 +97,10 @@ URL alias and AI credential/provider explicitly overridden. Integration tests
 cover real Prisma/session boundaries with mocked provider transport.
 
 Local checks do not establish hosted cold-start latency, real provider delivery,
-Gemini language accuracy or public availability. Production credentials, provider
-dashboards, live services and publishing were untouched. Phase 5 can close only
-after its separately approved hosted/live checklist passes; Stretch is unstarted.
+Gemini language accuracy or public availability. Approved Vercel setup is now in
+progress; a successful public release and hosted core-flow evidence are pending.
+Phase 5 can close only after its approved hosted/live checklist passes; Stretch
+is unstarted.
 
 ## Phase 4 free-tier AI — implemented and verified locally
 

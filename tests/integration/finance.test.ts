@@ -156,6 +156,21 @@ describe("finance CRUD through real sessions and Prisma", () => {
     expect(await finance.listBudgets(alice, "2026-11")).toEqual([]);
   });
 
+  it("keeps real session checks working after repeated constraint-error connection replacements", async () => {
+    const input = { categoryId: expense, period: "2026-11", limitAmount: "100", warningAt: 80 };
+    await finance.createBudget(alice, input);
+    // pg discards a pooled connection after a SQL error. The replacement must
+    // authenticate against the persisted session while its old socket drains.
+    for (let attempt = 0; attempt < 20; attempt++) {
+      await expect(finance.createBudget(alice, input)).rejects.toMatchObject({ code: "P2002" });
+      expect(await finance.listBudgets(alice, "2026-11")).toMatchObject([{ limitAmount: "100.00" }]);
+      await expect(finance.listBudgets(bob, "2026-11")).rejects.toMatchObject({ code: "FORBIDDEN" });
+    }
+    expect(await db.prisma.budget.count({ where: { userId: alice } })).toBe(1);
+    await db.prisma.session.deleteMany({ where: { userId: alice } });
+    await expect(finance.listBudgets(alice, "2026-11")).rejects.toMatchObject({ code: "UNAUTHENTICATED" });
+  });
+
   it("actions derive identity from the session, validate input and return safe failures", async () => {
     const form = new FormData();
     Object.entries({ operation: "createTransaction", ...transaction(expense), userId: bob, source: "TELEGRAM" }).forEach(([key, value]) => form.set(key, value));

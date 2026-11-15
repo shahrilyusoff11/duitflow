@@ -11,7 +11,10 @@ export async function createTestDatabase() {
   for (const directory of (await readdir(root, { withFileTypes: true })).filter((entry) => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
     await embedded.exec(await readFile(join(root, directory.name, "migration.sql"), "utf8"));
   }
-  const socket = new PGLiteSocketServer({ db: embedded, host: "127.0.0.1", port: 0 });
+  // pg replaces pooled connections after expected SQL constraint errors. Allow
+  // a replacement to connect while the previous TCP socket finishes closing;
+  // Prisma still serializes database work through its single-connection pool.
+  const socket = new PGLiteSocketServer({ db: embedded, host: "127.0.0.1", port: 0, maxConnections: 2 });
   await socket.start();
   const connectionString = `postgresql://postgres@${socket.getServerConn()}/postgres?sslmode=disable`;
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString, max: 1 }) });
