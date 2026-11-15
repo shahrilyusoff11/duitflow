@@ -5,8 +5,22 @@ import { z } from "zod";
 import { AccessError, requireUser } from "@/lib/auth/session";
 import { isTelegramConfigured, telegramBotUsername } from "@/lib/config/telegram";
 import { createLinkToken, unlinkTelegram } from "@/lib/telegram/dal";
+import { setAiConsent } from "@/lib/ai/dal";
 
 export type TelegramSettingsState = { ok: boolean; message: string; linkUrl?: string; expiresAt?: string };
+
+export async function mutateAiConsent(_previous: { ok: boolean; message: string }, form: FormData) {
+  try {
+    const user = await requireUser();
+    const enabled = z.enum(["enable", "disable"]).parse(form.get("operation")) === "enable";
+    if (enabled) z.literal("yes").parse(form.get("consent"));
+    await setAiConsent(user.id, enabled);
+    revalidatePath("/settings");
+    return { ok: true, message: enabled ? "Persetujuan AI disimpan. AI hanya digunakan apabila tersedia; semak setiap cadangan sebelum Sahkan." : "Penghuraian AI dimatikan. Mesej seterusnya menggunakan peraturan tempatan." };
+  } catch (error) {
+    return { ok: false, message: error instanceof z.ZodError ? "Sila sahkan persetujuan sebelum menghidupkan AI." : "Tetapan AI tidak dapat disimpan. Semak sesi anda; akaun demo tidak dibenarkan." };
+  }
+}
 
 export async function mutateTelegram(_previous: TelegramSettingsState, form: FormData): Promise<TelegramSettingsState> {
   try {

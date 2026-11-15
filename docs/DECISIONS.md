@@ -256,3 +256,72 @@ or missing money asks for an amount. Unsupported language gets guidance. There
 is no AI, casual-yes approval, proposal editing or arbitrary financial query
 language. Commands select only fixed scoped database reads. AI Q&A, provider
 consent, rate caps and the mocked AI golden set remain Phase 4.
+
+## 2026-11-15 — Phase 4 free-only AI implementation
+
+The owner requested Phase 4 only and required current Gemini free-tier
+verification plus approval before credential setup. Implementation is authorized;
+account/project/key/dashboard steps, live requests and Phase 5 are not.
+No paid service, schema change or dependency was added. Existing Neon config,
+Better Auth/session checks, finance DAL and Telegram identity boundary remain.
+
+Google's public pricing lists gemini-3.5-flash-lite standard text input/output
+as free, supports structured output and includes Malaysia. Current rate-limit
+docs refer to project-specific AI Studio quotas, so we do not invent universal
+RPM/TPM/RPD. Free data-use terms allow improvement/human review and prohibit
+sensitive/personal input. See the dated sources and approval proposal in
+AI_SETUP.md. This experiment is for synthetic, non-sensitive adult Malaysia
+portfolio examples; per-user consent does not override provider terms.
+
+Use native fetch behind an AiProvider interface and AI_PROVIDER configuration.
+A small direct parser needs no tool loop, SDK or gateway account. The model and
+endpoint are fixed; owner Free-project attestation, a server key and current
+per-user consent are all required before dispatch. Attestation cannot inspect
+billing; an unbilled Free project is the owner's necessary setup condition.
+No implicit paid-model failover or automatic alias change is allowed.
+
+Prompt input contains only message, Malaysian today and category names; no
+identity/history/DB output. System instructions treat both strings and category
+names as data. Strict local Zod schemas validate bounded JSON, including nested
+extra-field rejection, required confirmation semantics, null/missing values and
+enumerated query parameters. Monetary strings must be original complete source
+substrings, then parse with existing Decimal rules. Relative dates resolve on
+the server; missing/ambiguous dates extend existing clarification state. Only
+the existing explicit callback approval can consume a proposal and write rows.
+
+Fixed scoped ORM query dispatch implements all five specified operations. Each
+requires userId and rechecks the sender connection under a user row lock, using
+a consistent database snapshot. Exact/alias or unique one-character category
+matches are local. Ambiguous/unknown query categories ask for an exact resend.
+Responses are templates over actual database results, never model prose.
+
+Consent actions and the consent DAL independently verify real sessions, enforce
+owner identity and deny demos. A user row lock serializes consent updates with
+bot dispatch permission. Withdrawal blocks subsequent permission checks; a
+request already sent cannot be recalled. No consent toggle implicitly approves
+provider account setup. Store consent even when AI is unavailable, while clearly
+displaying that local rules are being used.
+
+A project advisory transaction lock protects both per-user and project rate
+windows, then the live connection/consent is rechecked under the user row lock.
+Reserve events before network dispatch; failed/invalid calls consume quota.
+User caps default 2/minute, 30/rolling 24 hours, configurable downward; project
+caps 4/minute, 30/24 hours. These local caps supplement unknown provider quotas.
+An unavailable DB permission/quota check fails closed to local parsing; any
+later persistence still independently checks its own identity boundary.
+
+Keep the spec's immediate-processing-message alternative: a five-second AI
+deadline covers fetch, bounded streaming read and interpretation; synchronous
+work finishes before webhook success within the existing 30-second setting.
+after() remains cleanup only, preserving real HTTP retry behavior on killed
+invocations without a raw inbox or extra service. A persisted proposal bypasses
+AI on retry and retains its stable UUID. Queries may be reparsed/replied after
+delivery failure within caps; they have no financial write effects. No hosted
+latency guarantee is claimed. Limit violations, missing configuration, model
+errors and timeout fall back to the existing deterministic grammar.
+
+The 45-case mocked golden set passes 100%; it measures the application contract
+and fail-safe behavior, not real Gemini language accuracy. Provider HTTP is
+mocked, database integration uses disposable PostgreSQL-compatible storage and
+real sessions, browsers run production Next.js with all DB/AI env overridden.
+No live key, provider call, production write, hosting or new remote CI run.

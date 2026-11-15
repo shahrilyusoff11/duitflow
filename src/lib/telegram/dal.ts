@@ -4,10 +4,12 @@ import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { requireUser, AccessError } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/db";
-import { monthRange, parseDate } from "@/lib/finance/dates";
+import { monthRange, parseDate, shiftMonth, todayInMalaysia } from "@/lib/finance/dates";
 import { Decimal } from "@/lib/finance/money";
 import { idSchema, monthSchema } from "@/lib/finance/validation";
 import { clarificationSchema, proposalSchema } from "./schemas";
+import { financeQuerySchema } from "@/lib/ai/schemas";
+import { matchCategory } from "@/lib/ai/interpret";
 
 const telegramId = z.string().regex(/^[1-9]\d{0,19}$/);
 const linkToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
@@ -112,6 +114,79 @@ export async function getTelegramCategories(userId: string, sender: string) {
     await authorizeTelegram(tx, userId, sender);
     return tx.category.findMany({ where: { userId }, select: { id: true, name: true, transactionType: true }, orderBy: { name: "asc" } });
   });
+}
+
+export async function consumeTelegramAiAttempt(userId: string, sender: string, minuteLimit: number, dailyLimit: number) {
+  z.number().int().min(1).max(2).parse(minuteLimit);
+  z.number().int().min(1).max(30).parse(dailyLimit);
+  return getDatabase().$transaction(async (tx) => {
+    // One project lock protects both shared and per-user windows across workers.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('duitflow:ai:quota'))`;
+    await authorizeTelegram(tx, userId, sender);
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { aiParsingEnabled: true } });
+    if (!user.aiParsingEnabled) return false;
+    const key = createHash("sha256").update(`ai-user:${userId}`).digest("hex");
+    const projectKey = createHash("sha256").update("ai-project:gemini").digest("hex");
+    const now = new Date();
+    const day = new Date(now.getTime() - 86_400_000), minute = new Date(now.getTime() - 60_000);
+    for (const [identity, perMinute, perDay] of [[key, minuteLimit, dailyLimit], [projectKey, 4, 30]] as const) {
+      if (await tx.rateLimitEvent.count({ where: { key: identity, bucket: "ai:parse", createdAt: { gte: minute } } }) >= perMinute) return false;
+      if (await tx.rateLimitEvent.count({ where: { key: identity, bucket: "ai:parse", createdAt: { gte: day } } }) >= perDay) return false;
+    }
+    await tx.rateLimitEvent.createMany({ data: [{ key, bucket: "ai:parse", createdAt: now }, { key: projectKey, bucket: "ai:parse", createdAt: now }] });
+    await tx.$executeRaw`DELETE FROM "RateLimitEvent" WHERE "id" IN (
+      SELECT "id" FROM "RateLimitEvent" WHERE "createdAt" < now() - interval '1 day' LIMIT 100
+    )`;
+    return true;
+  });
+}
+
+// A fixed dispatch table over scoped ORM queries. The model supplies no SQL,
+// identity, totals or response prose. Render only values read from PostgreSQL.
+export async function queryTelegramFinance(userId: string, sender: string, input: unknown, now = new Date()) {
+  const query = financeQuerySchema.parse(input);
+  return getDatabase().$transaction(async (tx) => {
+    await authorizeTelegram(tx, userId, sender);
+    const month = "period" in query ? monthSchema.parse(query.period === "this_month" ? todayInMalaysia(now).slice(0, 7) : query.period === "last_month" ? shiftMonth(todayInMalaysia(now).slice(0, 7), -1) : query.period) : null;
+    const range = month ? monthRange(month) : null;
+    const where = { userId, ...(range ? { occurredOn: { gte: range.start, lt: range.end } } : {}) };
+    let categoryId: string | undefined;
+    if ("categoryName" in query && query.categoryName) {
+      const categories = await tx.category.findMany({ where: { userId, transactionType: "EXPENSE" }, select: { id: true, name: true, transactionType: true } });
+      categoryId = matchCategory(query.categoryName, categories, "EXPENSE")?.id;
+      if (!categoryId) return { kind: "UNKNOWN_CATEGORY" as const };
+    }
+    switch (query.operation) {
+      case "net_for_period": {
+        const totals = await tx.transaction.groupBy({ by: ["type"], where, _sum: { amount: true } });
+        const income = totals.find((row) => row.type === "INCOME")?._sum.amount ?? new Decimal(0);
+        const expense = totals.find((row) => row.type === "EXPENSE")?._sum.amount ?? new Decimal(0);
+        return { kind: "NET" as const, month: month!, income: income.toFixed(2), expense: expense.toFixed(2), net: income.minus(expense).toFixed(2) };
+      }
+      case "spend_by_category": {
+        const total = await tx.transaction.aggregate({ where: { ...where, categoryId, type: "EXPENSE" }, _sum: { amount: true } });
+        const category = await tx.category.findFirstOrThrow({ where: { id: categoryId, userId } });
+        return { kind: "SPEND" as const, month: month!, categoryName: category.name, amount: (total._sum.amount ?? new Decimal(0)).toFixed(2) };
+      }
+      case "top_categories": {
+        const totals = await tx.transaction.groupBy({ by: ["categoryId"], where: { ...where, type: "EXPENSE" }, _sum: { amount: true }, orderBy: { _sum: { amount: "desc" } }, take: query.limit });
+        const categories = await tx.category.findMany({ where: { userId, id: { in: totals.map((row) => row.categoryId) } }, select: { id: true, name: true } });
+        return { kind: "TOP" as const, month: month!, rows: totals.map((row) => ({ categoryName: categories.find((item) => item.id === row.categoryId)!.name, amount: row._sum.amount!.toFixed(2) })) };
+      }
+      case "budget_status": {
+        const budgets = await tx.budget.findMany({ where: { userId, year: range!.start.getUTCFullYear(), month: range!.start.getUTCMonth() + 1, ...(categoryId ? { categoryId } : {}) }, include: { category: { select: { name: true } } }, take: 20, orderBy: { category: { name: "asc" } } });
+        const totals = await tx.transaction.groupBy({ by: ["categoryId"], where: { ...where, type: "EXPENSE", categoryId: { in: budgets.map((row) => row.categoryId) } }, _sum: { amount: true } });
+        return { kind: "BUDGET" as const, month: month!, rows: budgets.map((row) => {
+          const spent = totals.find((item) => item.categoryId === row.categoryId)?._sum.amount ?? new Decimal(0);
+          return { categoryName: row.category.name, limit: row.limitAmount.toFixed(2), spent: spent.toFixed(2), remaining: row.limitAmount.minus(spent).toFixed(2), percent: spent.dividedBy(row.limitAmount).times(100).toFixed(2) };
+        }) };
+      }
+      case "recent_transactions": {
+        const rows = await tx.transaction.findMany({ where: { userId }, orderBy: [{ occurredOn: "desc" }, { id: "desc" }], take: query.limit, select: { description: true, amount: true, type: true, occurredOn: true } });
+        return { kind: "RECENT" as const, rows: rows.map((row) => ({ ...row, amount: row.amount.toFixed(2), occurredOn: row.occurredOn.toISOString().slice(0, 10) })) };
+      }
+    }
+  }, { isolationLevel: "RepeatableRead" });
 }
 
 export async function getPendingAction(userId: string, sender: string) {

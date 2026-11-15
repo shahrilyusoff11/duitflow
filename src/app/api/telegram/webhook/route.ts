@@ -57,8 +57,8 @@ export async function POST(request: Request): Promise<Response> {
   try {
     lease = await claimTelegramUpdate(update.update_id);
     if (!lease) return ok();
-    // Phase 3 is bounded deterministic work, not a slow AI call. Keep the HTTP
-    // delivery retryable until processing succeeds; an early200 would lose work
+    // Deterministic intake plus optional AI has a five-second AI deadline. Keep
+    // HTTP delivery retryable until processing succeeds; an early200 loses work
     // if a post-response invocation dies. The processor gives immediate chat
     // feedback after checking the linked identity instead.
     await processTelegramUpdate(update);

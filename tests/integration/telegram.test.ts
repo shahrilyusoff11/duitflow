@@ -40,6 +40,7 @@ async function connect() { const issued = await telegram.createLinkToken(alice);
 beforeAll(async () => {
   db = await createTestDatabase();
   Object.entries(environment).forEach(([key, value]) => vi.stubEnv(key, value));
+  vi.stubEnv("AI_PROVIDER", "deterministic");
   vi.stubEnv("DATABASE_URL", db.connectionString);
   context.database = db.prisma;
   context.auth = createAuth(db.prisma, environment);

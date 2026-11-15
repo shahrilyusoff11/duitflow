@@ -138,7 +138,9 @@ generate fresh links if a linking URL was exposed.
 
 Messages and bot replies pass through Telegram; bot chats are not a place for
 bank passwords, authentication secrets or banking credentials. No messages are
-sent to an AI service in Phase 3. Application logs must not contain raw messages,
+sent to an AI service without Phase 4 provider configuration and explicit user
+consent. See [AI setup and privacy](AI_SETUP.md) before enabling the optional
+parser. Application logs must not contain raw messages,
 link tokens, webhook secrets or bot tokens. The database holds only the
 validated data needed by pending actions and financial records.
 
@@ -156,7 +158,8 @@ intake and runs bounded deterministic work before HTTP success. Each outbound
 API call has a four-second timeout and the route declares a 30-second duration.
 Next.js `after()` performs cleanup only; it is not a durable job queue. This uses
 the brief's immediate-message alternative and keeps real processing failures
-retryable through Telegram. Phase 4 must revisit slow parsing before adding AI.
+retryable through Telegram. Phase 4 retains this alternative with a five-second
+AI deadline and deterministic fallback; after() still only handles cleanup.
 
 DONE deliveries return 200 without processing again. FAILED/stale updates resume.
 An active PROCESSING lease returns 503 without duplicate work until the first

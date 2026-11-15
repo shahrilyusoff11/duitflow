@@ -26,9 +26,9 @@ function inferCategory(description: string, type: "INCOME" | "EXPENSE", categori
   return matches.length === 1 ? matches[0].id : undefined;
 }
 
-function finish(transactions: PartialTransaction[]): ParseResult {
+export function finishParse(transactions: PartialTransaction[]): ParseResult {
   for (const [index, item] of transactions.entries()) {
-    if (!item.amount || !item.categoryId) return { kind: "CLARIFICATION", payload: clarificationSchema.parse({ transactions, index, field: !item.amount ? "amount" : "category" }) };
+    if (!item.amount || !item.occurredOn || !item.categoryId) return { kind: "CLARIFICATION", payload: clarificationSchema.parse({ transactions, index, field: !item.amount ? "amount" : !item.occurredOn ? "date" : "category" }) };
   }
   return { kind: "PROPOSAL", payload: proposalSchema.parse({ transactions }) };
 }
@@ -67,7 +67,7 @@ export function parseTelegramText(text: string, categories: TelegramCategory[], 
     if (!money && !categoryId) return unsupported();
     transactions.push({ description, type, occurredOn, ...(amount ? { amount } : {}), ...(categoryId ? { categoryId } : {}) });
   }
-  try { return finish(transactions); } catch { return unsupported(); }
+  try { return finishParse(transactions); } catch { return unsupported(); }
 }
 
 export function continueClarification(payload: unknown, reply: string, categories: TelegramCategory[]): ParseResult | null {
@@ -77,17 +77,22 @@ export function continueClarification(payload: unknown, reply: string, categorie
   const item = state.transactions[state.index];
   if (state.field === "amount") {
     try { item.amount = parseMoney(reply.trim()).toFixed(2); } catch { return null; }
+  } else if (state.field === "date") {
+    const value = reply.trim().toLowerCase();
+    const relative = { today: "today", "hari ini": "today", semalam: "semalam", yesterday: "semalam", kelmarin: "kelmarin", "minggu lepas": "minggu lepas", "last week": "minggu lepas" } as const;
+    try { item.occurredOn = Object.hasOwn(relative, value) ? resolveRelativeDate(relative[value as keyof typeof relative]) : parseDate(value).toISOString().slice(0, 10); } catch { return null; }
   } else {
     const matches = categories.filter((category) => category.transactionType === item.type && category.name.toLocaleLowerCase("ms-MY") === reply.trim().toLocaleLowerCase("ms-MY"));
     if (matches.length !== 1) return null;
     item.categoryId = matches[0].id;
   }
-  return finish(state.transactions);
+  return finishParse(state.transactions);
 }
 
 export function clarificationQuestion(payload: Clarification, categories: TelegramCategory[]) {
   const item = payload.transactions[payload.index];
   if (payload.field === "amount") return `Berapa amaun untuk “${item.description}”? Balas contohnya RM12.50. /cancel untuk batal.`;
+  if (payload.field === "date") return `Tarikh untuk “${item.description}”? Balas YYYY-MM-DD, hari ini, semalam, kelmarin atau minggu lepas. /cancel untuk batal.`;
   const names = categories.filter((category) => category.transactionType === item.type).map((category) => category.name);
   return `Kategori untuk “${item.description}”? Balas nama tepat: ${names.slice(0, 20).join(", ") || "tiada kategori tersedia; tambah di web dahulu"}${names.length > 20 ? ", atau kategori lain daripada senarai web anda" : ""}. /cancel untuk batal.`;
 }

@@ -9,6 +9,8 @@
 .finance-form { margin-block: 18px; }
 .finance-form label, .filter-form label { display: flex; flex-direction: column; gap: 7px; font-size: 13px; font-weight: 600; width: 100%; }
 .finance-form input, .finance-form select, .filter-form input, .filter-form select { font: inherit; min-height: 42px; padding: 10px; border: 1px solid #a2b5a6; background: #fff; color: var(--ink); border-radius: 6px; width: 100%; min-width: 0; }
+.finance-form .consent-label { flex-direction: row; align-items: flex-start; gap: 12px; cursor: pointer; }
+.finance-form .consent-label input { flex: 0 0 20px; width: 20px; height: 20px; min-height: 20px; padding: 0; margin-top: 2px; accent-color: var(--green); }
 input:focus-visible, select:focus-visible, summary:focus-visible { outline: 3px solid #31784c; outline-offset: 3px; }
 .filter-form { display: flex; align-items: end; flex-wrap: wrap; gap: 14px; margin-block: 24px; }
 .filter-form label { width: auto; flex: 1 1 145px; max-width: 260px; }

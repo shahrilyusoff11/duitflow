@@ -2,12 +2,16 @@ import { requirePageUser } from "@/lib/auth/session";
 import { isTelegramConfigured } from "@/lib/config/telegram";
 import { getTelegramSettings } from "@/lib/telegram/dal";
 import { TelegramSettingsForm } from "@/components/telegram/settings-form";
+import { AiSettingsForm } from "@/components/telegram/ai-settings-form";
+import { getAiSettings } from "@/lib/ai/dal";
+import { getAiConfig } from "@/lib/config/ai";
 
 export const metadata = { title: "Tetapan — DuitFlow", referrer: "no-referrer" };
 
 export default async function SettingsPage() {
   const user = await requirePageUser();
-  const connection = await getTelegramSettings(user.id);
+  const [connection, ai] = await Promise.all([getTelegramSettings(user.id), getAiSettings(user.id)]);
+  const aiAvailable = getAiConfig(process.env) !== null;
   const configured = isTelegramConfigured(process.env);
   const linked = connection.telegramUserId !== null;
   return <>
@@ -25,7 +29,17 @@ export default async function SettingsPage() {
       <p>Hantar <code>Makan RM12</code> atau <code>Gaji RM2500</code>. Bot meminta butiran yang kurang dan memaparkan cadangan sebelum menyimpan.</p>
       <p>Tekan <strong>Sahkan</strong> untuk menyimpan atau <strong>Batal</strong> untuk membuang cadangan. Gunakan <code>/cancel</code> untuk membatalkan cadangan semasa.</p>
       <p><code>/balance</code> menunjukkan pendapatan tolak perbelanjaan direkodkan bulan ini, <code>/budget</code> menunjukkan bajet dan <code>/report</code> menunjukkan ringkasan rekod.</p>
-      <p>Mesej dan balasan melalui Telegram. Gunakan chat peribadi sahaja dan jangan hantar maklumat bank atau rahsia. Penghuraian menggunakan peraturan tempatan tanpa perkhidmatan AI.</p>
+      <p>Mesej dan balasan melalui Telegram. Gunakan chat peribadi sahaja dan jangan hantar maklumat bank atau rahsia. Peraturan tempatan sentiasa tersedia; penghuraian AI memerlukan persetujuan anda di bawah.</p>
+    </section>
+    <section className="account-card" aria-label="Privasi dan penghuraian AI">
+      <h2>Penghuraian AI pilihan</h2>
+      <p>Persetujuan anda: <strong>{ai.aiParsingEnabled ? "Dihidupkan" : "Dimatikan"}</strong>. AI {aiAvailable ? "tersedia" : "belum tersedia; peraturan tempatan digunakan"}.</p>
+      <p>Apabila dihidupkan dan tersedia, mesej baharu anda, tarikh tempatan hari ini dan senarai nama kategori dihantar kepada Google Gemini untuk memahami bahasa biasa. Sejarah transaksi, nama profil, e-mel, ID dan token tidak dihantar.</p>
+      <p>Dalam tier percuma, Google boleh menggunakan input dan output untuk menambah baik produknya; penyemak manusia mungkin membacanya. Jangan hantar maklumat sensitif, sulit atau peribadi, termasuk butiran bank. Gunakan contoh sintetik untuk percubaan portfolio ini.</p>
+      <p>AI boleh tersilap. Semak amaun, tarikh dan kategori; hanya butang Sahkan menyimpan transaksi. Jawapan kewangan dikira daripada rekod tersimpan. Jika AI gagal atau had dicapai, gunakan Makan RM12, Gaji RM2500, /balance, /budget atau /report.</p>
+      <p>Mematikan AI menghentikan penghantaran seterusnya. Permintaan yang sudah dihantar tidak boleh ditarik balik.</p>
+      <p><a className="text-link" href="https://aistudio.google.com/docs/terms" target="_blank" rel="noopener noreferrer">Terma dan penggunaan data Google Gemini</a></p>
+      <AiSettingsForm enabled={ai.aiParsingEnabled} isDemo={ai.isDemo} />
     </section>
   </>;
 }

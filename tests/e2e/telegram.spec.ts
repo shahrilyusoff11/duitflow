@@ -49,3 +49,30 @@ test("settings rejects anonymous access", async ({ page }) => {
   await page.goto("/settings");
   await expect(page).toHaveURL(/\/sign-in$/);
 });
+
+test("AI consent defaults off, requires a checkbox, persists and can be withdrawn without a key", async ({ page, context }, testInfo) => {
+  const device = testInfo.project.name.startsWith("mobile") ? "mobile" : "desktop";
+  await signIn(context, `ai-${device}`);
+  await page.goto("/settings");
+  const region = page.getByRole("region", { name: "Privasi dan penghuraian AI", exact: true });
+  await expect(region).toContainText("Dimatikan");
+  await expect(region).toContainText("belum tersedia; peraturan tempatan digunakan");
+  await expect(region).toContainText("penyemak manusia");
+  const consent = region.getByRole("checkbox");
+  await expect(consent).toHaveAttribute("required", "");
+  await region.getByRole("button", { name: "Hidupkan AI dengan persetujuan" }).click();
+  await expect(consent).toBeVisible();
+  await consent.check();
+  await region.getByRole("button", { name: "Hidupkan AI dengan persetujuan" }).click();
+  await expect(region.getByRole("status")).toContainText("Persetujuan AI disimpan");
+  await page.reload();
+  await expect(region).toContainText("Dihidupkan");
+  await expect(region).toContainText("belum tersedia; peraturan tempatan digunakan");
+  await region.getByRole("button", { name: "Matikan AI", exact: true }).click();
+  await expect(region.getByRole("status")).toContainText("dimatikan");
+  await page.reload();
+  await expect(region).toContainText("Dimatikan");
+  await expect(region.getByRole("checkbox")).not.toBeChecked();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await page.screenshot({ path: testInfo.outputPath("ai-settings.png"), fullPage: true });
+});

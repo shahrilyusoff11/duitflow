@@ -1,9 +1,84 @@
 # Implementation status — 15 November 2026
 
-**Phases 1 and 2 are complete. Phase 3 is implemented and verified locally.**
-The owner requested Telegram integration only. Stop before Phase 4. No AI,
-provider/account setup, hosting deployment, schema migration or live Neon write
-was performed. Live Telegram setup/verification remains an owner step.
+**Phases 1 and 2 are complete. Phases 3 and 4 are implemented and verified locally.**
+The owner requested Phase 4 only. Stop before Phase 5. Gemini credentials,
+account/dashboard setup and live calls remain pending explicit approval. No paid
+service, new dependency, hosting deployment, schema migration or live Neon write
+was performed. Live Telegram setup/verification also remains an owner step.
+
+## Phase 4 free-tier AI — implemented and verified locally
+
+- [x] Verified current public Gemini eligibility/terms from official sources on
+  15 November 2026; selected gemini-3.5-flash-lite standard text with structured
+  output. Malaysia is supported. Exact project quotas require approved AI Studio
+  inspection; no universal allowance or owner account eligibility is claimed.
+- [x] AI_PROVIDER abstraction defaults to deterministic. Direct bounded fetch
+  adapter uses a fixed endpoint/model and key header; no SDK, gateway account,
+  tools, caching, paid fallback or automatic upgrade. Missing key/Free-project
+  attestation/config, quota/permission failure or invalid output falls back.
+- [x] Protected per-user consent, default off; actions and DAL independently
+  check real database sessions and derive user identity. Demo users cannot opt
+  in. Malay notice describes minimal payload, human review/product improvement,
+  sensitive-data prohibition, adult Malaysia use and withdrawal limits.
+- [x] Strict bounded Zod schemas validate intent, transactions, confirmation,
+  uncertainty and query parameters, rejecting extra fields and fabricated money.
+  Money stays strings/Decimal. Dates resolve locally; amount/category/date
+  clarification and multiple transactions retain explicit atomic approval.
+- [x] Five fixed owner-scoped query operations render exact stored DB values.
+  The model never supplies SQL, identities, totals, financial answers or writes.
+  Category matching is bounded; unclear query categories ask for a new request.
+- [x] Atomic Postgres per-user and shared project rate limits with no Redis.
+  Defaults: 2/minute and 30/rolling 24 hours/user; 4/minute and 30/24 hours/project.
+  Attempts count before dispatch, including failures. These are application
+  safety caps, not a statement of Google quota. Five-second network/read/parse
+  deadline and bounded HTTP/model/input sizes fail to deterministic intake.
+- [x] Revisited Telegram timing: immediate feedback, bounded AI before HTTP
+  success, unchanged 30-second route and retryable leases; after() cleanup only.
+  Existing stable pending-action UUIDs, atomic approvals, tombstones, live
+  connection checks and cross-user denials remain active. No raw inbox added.
+- [x] Minimal provider payload: original message, server's Malaysian today and
+  category names only. No profile identity, tokens, IDs, history or query results.
+- [x] [45/45 mocked golden cases (100%)](AI_GOLDEN_REPORT.md). CI makes no live AI
+  requests. This is application safety/extraction-contract evidence, not live
+  model accuracy. Provider and integration mocks use only synthetic values.
+- [x] Existing auth, finance, Neon configuration, three migrations, ownership
+  constraints, signup trigger, Telegram linking/commands and CI remain intact.
+- [x] README, AGENTS, decisions, acceptance checklist, optional env validation,
+  [setup/approval proposal](AI_SETUP.md) and Telegram timing docs updated.
+
+Executed on Windows / Node 26.11.1, npm 11.20.0:
+
+| Phase 4 check | Actual result |
+| --- | --- |
+| npm run db:validate | Passed |
+| npm run setup:check | Passed; format only, no values/connectivity claim |
+| npm run lint | Passed, no warnings |
+| npm run typecheck | Passed |
+| npm test | **315 passed** across 15 files (88 new Phase 4 tests) |
+| npm run build | Passed; settings/webhook remain dynamic |
+| npm run test:e2e | **20 passed**, desktop/mobile Chromium, 6 workers |
+| Visual review | Synthetic consent Settings desktop/mobile screenshots inspected; no overflow |
+| git diff --check | Passed |
+
+The integration suite exercises real browser consent/session authorization and
+webhook -> mocked provider -> parser -> scoped DAL -> Prisma/pg/PostgreSQL,
+including no-key/off fallback, failed/malicious output, shared minute/day windows,
+query totals, Malaysian periods, private-chat restrictions, unlink during parse,
+multi-row approval, casual-yes denial, duplicate callback and intake replay.
+All browser DB URL aliases and AI provider credentials are explicitly overridden.
+
+Initial verification caught test-only missing database environment setup and
+type mismatches; corrected fixtures and matchers now pass. No app auth checks
+were weakened. Final review also added money-token completeness regressions
+(including sen/ringgit units and separated signs) and exact custom-category
+precedence over aliases. Consent checkbox layout was reviewed at desktop/mobile widths.
+
+No live Gemini request/model-quality benchmark, Gemini key setup, AI Studio
+dashboard action, production consent change, real Telegram delivery, new live
+Neon/OAuth check or new remote CI run is claimed. An unbilled Free project and
+actual quotas must be verified after approval before credentials are configured.
+Free-tier terms prohibit sensitive/personal input: use synthetic portfolio
+examples only. Phase 5 and Stretch remain unstarted.
 
 ## Phase 3 Telegram — implemented and verified locally
 
@@ -88,7 +163,8 @@ No Phase 3 remote CI run, real bot delivery, public HTTPS registration, hosting
 duration measurement, new live OAuth or live Neon check is claimed. Outbound
 messages can be repeated/uncertain after network timeouts, while financial writes
 stay atomic and idempotent. Provider setup and a live synthetic Telegram smoke
-check remain necessary before public use. Phase 4 and Stretch remain unstarted.
+check remain necessary before public use. Phase 4 and Stretch were unstarted at
+that checkpoint; see Phase 4 evidence above.
 
 ## Phase 2 finance MVP — implemented and verified locally
 
@@ -282,5 +358,6 @@ All Phase 1 acceptance checks now pass. Completion/status documents were updated
 locally after this verified run; no application or workflow code changed.
 
 At that checkpoint Phases 2–5 and Stretch were unstarted. Phases 2 and 3 have
-since been implemented and verified locally as recorded above. Phases 4–5,
-golden-set fixtures, demo/deployment acceptance and Stretch remain unstarted.
+since been implemented and verified locally as recorded above. Phase 4 is now
+implemented with mocked golden-set evidence. Live Gemini setup, Phase 5,
+demo/deployment acceptance and Stretch remain unstarted.

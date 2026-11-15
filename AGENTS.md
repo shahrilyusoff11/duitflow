@@ -19,7 +19,10 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
   Phase 2 web finance on 15 November 2026; its implementation and local evidence
   are recorded in docs/STATUS.md. The owner requested Phase 3 Telegram on
   15 November 2026; its local implementation/evidence is in docs/STATUS.md.
-  Stop before Phase 4 unless requested. No AI or paid service is authorized.
+  The owner requested Phase 4 free-tier AI implementation on 15 November 2026.
+  Its implementation/evidence is in docs/STATUS.md. Stop before Phase 5.
+  Gemini credential/account/dashboard setup and live calls still require explicit
+  approval; see docs/AI_SETUP.md. No paid service is authorized.
   The owner approved Better Auth + GitHub-only OAuth +
   PostgreSQL database sessions in chat on 15 November 2026. Implement this scope
   without asking for the same approval again. See `docs/AUTH_PROPOSAL.md`.
@@ -75,6 +78,10 @@ is required for lint, tests, typecheck, generate, or build.
 - `src/lib/finance/`: scoped finance DAL, money/date validation and aggregates.
 - `src/lib/telegram/`: private-chat validation, deterministic parser, scoped
   connection-based DAL, atomic approvals, update leases and bounded transport.
+- `src/lib/ai/`: fixed Gemini adapter, strict untrusted output validation,
+  minimal payload, consent DAL, query rendering and deterministic fallback.
+  `AI_PROVIDER` defaults to deterministic; Gemini also requires an owner Free
+  project attestation and per-user consent. Never treat local caps as provider quotas.
 - `src/generated/prisma/`: generated, ignored; regenerate instead of editing.
 - `prisma/migrations/`: reviewed, append-only SQL. Preserve raw CHECK constraints
   and the pending-action partial index when drafting future migrations.
@@ -115,6 +122,8 @@ is required for lint, tests, typecheck, generate, or build.
   DATABASE_URL and DIRECT_URL. Never let automated fixture migrations use .env's
   production credentials. Run live Neon checks only when explicitly authorized.
 - No runtime SQL from AI/parser output, live AI calls in CI, or AI without user opt-in.
+- Keep Gemini to the reviewed free-eligible model; no paid fallback/automatic
+  model change. Five-second AI deadline; Postgres caps reserve before dispatch.
 - No Stretch features or empty placeholder navigation before Core passes.
 - No cross-user caching of authenticated results. Shared finance caches are off.
 

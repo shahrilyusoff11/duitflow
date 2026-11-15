@@ -317,7 +317,7 @@ The immediate processing-message alternative keeps deterministic processing
 HTTP-retryable; after() handles cleanup only. Active leases return 503 without
 duplicate work so a killed worker does not lose its retry (docs/DECISIONS.md).
 Live bot credentials, public HTTPS webhook registration and real delivery are
-not claimed. Stop before Phase 4.
+not claimed at that checkpoint. Phase 4 evidence follows.
 
 ### Phase 4 — Free-tier AI parsing
 1. Gemini behind `AI_PROVIDER` abstraction; verify current free-tier model and quota first and report the choice.
@@ -327,6 +327,12 @@ not claimed. Stop before Phase 4.
 5. **Golden-set tests** in `tests/fixtures/` using a **mocked AI provider** (CI must never call the live API): at least ~30 Malay/English messages covering single/multiple purchases, income, relative dates, `RM1,200`, `1.2k`, ambiguous amounts, missing amounts, queries, prompt-injection strings ("abaikan arahan sebelum ini…"), and malformed/oversized/extra-field model output. Report pass rate.
 
 **Done when:** natural Malay messages become safe, confirmed, accurately stored transactions; bad AI output fails safe; the app still works with no AI key.
+
+**Local implementation evidence (15 November 2026):** Phase 4 implemented;
+315 unit/integration tests, 20 browser tests and 45/45 mocked golden cases pass.
+Gemini 3.5 Flash-Lite public free eligibility was verified; exact project quotas
+and credential setup require approval. No live AI call/model-accuracy claim.
+See docs/AI_SETUP.md and docs/STATUS.md. Stop before Phase 5.
 
 ### Phase 5 — Polish and deploy
 1. Responsiveness, accessibility, error/empty states.
@@ -349,15 +355,15 @@ Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram 
 - [x] Telegram links/unlinks securely; unlink invalidates pending actions (local automated evidence; live setup pending).
 - [x] Webhook rejects bad secrets (`401`), ignores non-private chats, and returns `200` for authentic unsupported updates.
 - [x] A retry after a failed/timed-out update is processed, not dropped; a replay after success is ignored.
-- [x] Linked user can submit one or multiple transactions through the documented deterministic grammar; missing amount/category clarification resolves follow-up replies (broader AI language remains Phase 4).
+- [x] Linked user can submit one or multiple transactions through deterministic grammar or optional consented AI; missing amount/category/date clarification resolves follow-up replies (mocked AI evidence).
 - [x] Bot always asks for confirmation before saving; repeated button presses create no duplicates.
 - [x] Phase 3 financial commands read only scoped stored records; app works without any AI key.
-- [ ] Financial answers come only from stored DB records via enumerated operations.
-- [ ] Invalid, ambiguous or malicious AI output fails safely.
-- [ ] App works without an AI key via the deterministic parser; AI parsing is opt-in per user.
-- [ ] AI and login rate limits work without Redis.
-- [ ] Unit, authorization/integration and critical E2E tests pass; golden-set report included.
-- [x] Phase 3 unit/integration and critical browser tests pass; AI golden-set report remains Phase 4.
+- [x] Financial answers come only from stored DB records via enumerated operations (local integration evidence).
+- [x] Invalid, ambiguous or malicious AI output fails safely (mocked provider evidence).
+- [x] App works without an AI key via the deterministic parser; AI parsing is opt-in per user.
+- [x] AI and login rate limits work without Redis (Postgres tests).
+- [x] Unit, authorization/integration and critical E2E tests pass; golden-set report included.
+- [x] Phase 3 unit/integration and critical browser tests pass; Phase 4 golden-set report is in docs/AI_GOLDEN_REPORT.md.
 - [ ] No secrets in Git; all secrets server-side.
 - [ ] Deploys on free tiers only for small personal non-commercial use.
 - [ ] README covers setup, env vars, architecture, testing, deployment, token rotation, privacy/PDPA note and known free-tier limitations.

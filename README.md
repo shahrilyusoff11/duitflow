@@ -6,15 +6,16 @@ A personal finance MVP for Malaysia, built incrementally from
 [the specification](DUITFLOW_CODEX_SPEC.md). UI language is Bahasa Melayu,
 currency is MYR, and financial dates use Asia/Kuala_Lumpur.
 
-**Status: Phase 3 Telegram integration implemented locally.** Protected Settings,
-secure linking, private-chat commands, deterministic intake, clarification and
-atomic confirmation are available. Authentication, Neon and web finance are
-preserved. Phase 4 AI parsing has not started.
+**Status: Phase 4 optional AI parsing implemented and verified locally.**
+Consent Settings, bounded Gemini adapter, multi-transaction/date clarification,
+fixed financial queries, Postgres rate caps and deterministic fallback are
+available. Authentication, Neon, web finance and Telegram are preserved.
+Gemini credential setup and live calls await approval. Stop before Phase 5.
 [Phase 1 GitHub CI](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318)
-passed; Phase 2 and Phase 3 local verification is recorded in [STATUS.md](docs/STATUS.md).
+passed; Phases 2–4 local verification is recorded in [STATUS.md](docs/STATUS.md).
 The app retains Better Auth GitHub-only OAuth, database sessions,
 atomic per-user category seeding, scoped data access, migrations and CI.
-Live Telegram setup/verification and hosting remain owner steps; AI is deferred.
+Live Telegram setup/verification and hosting remain owner steps.
 The existing Neon Free production branch is connected and all three
 migrations are applied. [Neon setup, complete change record and proof](docs/NEON_SETUP.md).
 
@@ -22,6 +23,7 @@ See [current evidence and acceptance checklist](docs/STATUS.md),
 [approved auth approach](docs/AUTH_PROPOSAL.md),
 [step-by-step setup](docs/SETUP.md),
 [Telegram setup and limits](docs/TELEGRAM_SETUP.md), and
+[AI free-tier proposal and privacy limits](docs/AI_SETUP.md),
 [technical decisions](docs/DECISIONS.md).
 
 ## Run locally without provider credentials
@@ -50,7 +52,8 @@ test-only PostgreSQL-compatible socket server and signed persisted session
 fixtures. It runs Prisma Migrate and checks desktop/mobile OAuth initiation,
 protected access, profile scoping, sign-out, cookie replay, landing navigation,
 category/transaction/budget CRUD with dashboard updates and warnings, and
-Telegram Settings link generation/unlink confirmation.
+Telegram Settings link generation/unlink confirmation, and opt-in consent
+requirements, persistence and withdrawal without an AI key.
 The external GitHub screen is intercepted, never called live. Integration tests
 also verify the callback with mocked GitHub HTTP responses. This is separate
 from the required real provider verification.
@@ -144,34 +147,39 @@ table or an explicit identity migration; no names/emails are invented.
 ```text
 src/app/                    Landing, auth, protected finance pages/actions, APIs
 src/components/auth/        Sign-in/out controls with loading/error feedback
+src/components/telegram/    Link/unlink and AI consent forms
 src/components/finance/     Accessible forms, budget progress, server-rendered chart
 src/lib/auth/               Better Auth, session guards, scoped profile DAL
 src/lib/config/             Validated, redacted database configuration
 src/lib/db/                 Lazy server-only Prisma/pg connection
 src/lib/finance/             Scoped DAL, money/date validation, defaults, aggregates
 src/lib/telegram/            Webhook leases, deterministic parser, Telegram-scoped DAL
+src/lib/ai/                  Optional Gemini adapter, validation, consent, fixed answers
 prisma/schema.prisma        Domain + required OAuth identity/session/state models
 prisma/migrations/          Domain, integrity, auth and category signup trigger
 scripts/                    Safe env initialization and configuration format check
 tests/unit/                 Config, money parsing/math, Malaysian calendar tests
 tests/integration/          SQL migrations, real sessions, authorization, finance CRUD
 tests/e2e/                  Production browser auth and finance flows
+tests/fixtures/             Synthetic mocked AI golden set
 docs/                       Decisions, proposal, current status
 .github/workflows/ci.yml     Checks + disposable PostgreSQL migration + browser tests
 ```
 
 ## Architecture
 
-Authentication, web finance and deterministic Telegram intake are implemented.
-Gemini and AI opt-in remain Phase 4.
+Authentication, web finance, Telegram intake and optional opt-in AI are
+implemented. Provider credential setup awaits approval.
 
 ```mermaid
 flowchart TD
   Browser["Browser · Next.js UI"] --> Server["Authenticated server actions / scoped DAL"]
   Telegram["Telegram private chat"] --> Webhook["Validated webhook + update state machine"]
-  Webhook --> Parser["Deterministic parser"]
+  Webhook --> Parser["Optional consented AI · deterministic fallback"]
+  Parser --> Query["Five fixed scoped DB query operations"]
   Parser --> Pending["Clarification or explicit confirmation"]
   Pending --> Server
+  Query --> Prisma
   Server --> Prisma["Prisma · decimal money · local DATE"]
   Prisma --> PostgreSQL["Neon PostgreSQL"]
 ```
@@ -221,19 +229,46 @@ Try `Makan RM12`, `Gaji RM2500`, or `kopi RM8 lepas tu minyak RM40`.
 Missing/ambiguous amounts and categories trigger a clarification; choose the
 exact category name when asked. Confirm with **Sahkan**, or **Batal** and resend
 to change a proposal. A casual `ya` never writes. Unsupported language receives
-format guidance. No AI provider is called.
+format guidance. Optional AI requires provider configuration and explicit
+per-user consent; local rules remain available without a key.
 
 Secret checks precede bounded JSON validation. Groups/channels are ignored.
 DONE deliveries are deduplicated; failed/stale leases retry; busy leases return
 503 so a timed-out worker's retry is preserved. Stable action IDs also prevent
 message retries from creating a second approvable proposal after a save.
-Phase 3 uses bounded synchronous deterministic processing and immediate chat
-feedback; HTTP failures remain retryable until processing finishes. Next.js
+Intake uses immediate chat feedback, optional AI with a five-second deadline,
+and deterministic fallback; HTTP failures remain retryable until processing finishes. Next.js
 `after()` only runs bounded cleanup. No raw-update inbox, cron, broker or extra
 service is required. Outbound replies can be repeated or uncertain after a
 network failure; database approvals remain atomic and idempotent.
 
 No live bot, webhook registration or hosting deployment was performed.
+
+## Optional AI (Phase 4)
+
+Default AI_PROVIDER is deterministic; per-user consent defaults off. The optional
+direct Gemini adapter is fixed to gemini-3.5-flash-lite, publicly listed as free
+for standard text input/output on 15 November 2026. Actual account eligibility
+and quotas require approved verification. No key or live API call has been used.
+See [the complete free-only setup/approval proposal](docs/AI_SETUP.md).
+
+Settings explains Google's improvement/human-review policy and sensitive-data
+prohibition. Use only synthetic, non-sensitive portfolio examples with this free
+tier. The provider receives message text, local today and category names only.
+Withdraw consent at any time; a request already sent cannot be recalled.
+
+AI proposes up to ten transactions, asks for missing/ambiguous amounts, dates
+or categories, and always requires the existing Sahkan callback to save.
+Financial questions select one of five fixed server operations; actual DB values
+supply answers. Unknown intent/extra fields, invalid money, quota exhaustion,
+timeouts and provider errors fail to deterministic parsing. No SQL, user identity,
+financial totals or authorization comes from the model.
+
+Postgres caps default to 2 calls/rolling minute and 30/24 hours/user, plus
+4/minute and 30/24 hours/project. These are local safety caps, not Google quotas.
+No paid fallback, extra service or new package is required.
+[Mocked golden set: 45/45 (100%)](docs/AI_GOLDEN_REPORT.md); this is application
+validation evidence, not a live-model accuracy measurement.
 
 ## CI and verification
 
@@ -256,7 +291,8 @@ No frontend deployment has been created. Local evidence and limitations are in
   and `allowed_updates: ["message", "callback_query"]`. Do not configure a
   webhook before its secure handler and tests exist.
 - Gemini is optional, default off per user, and must have a currently eligible
-  free API model. No model/key is chosen or needed in Phase 1.
+  free API model. Phase 4's proposed model is documented in AI_SETUP.md;
+  key/project setup remains unapproved and no live model call is claimed.
 - No paid billing, card, custom domain, paid API, analytics, or automatic resource
   provisioning has been enabled.
 
@@ -272,7 +308,7 @@ for retry. No cron is needed.
 ## Privacy and credential rotation
 
 Only synthetic records are used in tests. No live financial records, provider
-credentials, or raw chat messages are committed or logged. AI parsing will be
+credentials, or raw chat messages are committed or logged. AI parsing is
 explicitly opt-in, with a provider data-use notice and minimal prompt payload.
 A future demo account must be read-only or safely reset and must block Telegram
 linking and AI. No demo credentials are provided; finance mutations reject demo users.

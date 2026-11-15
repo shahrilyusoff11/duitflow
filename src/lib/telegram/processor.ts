@@ -7,6 +7,9 @@ import { clarificationQuestion, continueClarification, parseTelegramText, type P
 import { answerCallbackQuery, sendMessage } from "./transport";
 import { clarificationSchema, proposalSchema } from "./schemas";
 import type { TelegramUpdate } from "./update";
+import { parseWithAi } from "@/lib/ai/parser";
+import { queryTelegramFinance } from "./dal";
+import { renderFinanceAnswer } from "@/lib/ai/render";
 
 const linkInstructions = "Buka DuitFlow di web, log masuk dan pilih Tetapan > Telegram. Jana pautan baharu dan buka pautan itu dalam chat peribadi bot ini. Pautan luput selepas 10 minit.";
 const help = "DuitFlow: catat belanja dengan pengesahan.\nContoh: Makan RM12, Gaji RM2500, kopi RM8 lepas tu minyak RM40.\n/balance — pendapatan, belanja dan bersih bulan ini\n/budget — status bajet bulan ini\n/report — ringkasan bulan ini\n/cancel — batal cadangan atau soalan\n/link — cara sambungkan akaun\nBoleh tambah YYYY-MM selepas arahan laporan. Untuk ubah cadangan, batal dan hantar semula.";
@@ -123,15 +126,22 @@ async function processMessage(update: TelegramUpdate) {
     }
     return;
   }
-  // Phase 3 has only bounded deterministic work. Sending this before processing
-  // gives immediate feedback while the webhook retains retryable HTTP failures.
+  // Immediate feedback plus a five-second AI deadline preserves HTTP retry
+  // semantics. after() is housekeeping only, never the sole owner of this work.
   await reply(chatId, "Sedang memproses…");
   const categories = await getTelegramCategories(user.id, telegramUserId);
   const previousDelivery = await getActionForUpdate(user.id, telegramUserId, update.update_id);
   if (previousDelivery) { await presentStored(chatId, previousDelivery, categories); return; }
   const pending = await getPendingAction(user.id, telegramUserId);
   const continuation = pending?.kind === "CLARIFICATION" ? continueClarification(pending.payload, text, categories) : null;
-  const result = continuation ?? parseTelegramText(text, categories);
+  // Casual approval can never become a new AI proposal or a write.
+  const casualApproval = /^(ya|yes|ok|sahkan)$/i.test(text);
+  const result = continuation ?? (casualApproval ? parseTelegramText(text, categories) : await parseWithAi(user.id, telegramUserId, text, categories));
+  if (result.kind === "QUERY") {
+    if (pending?.kind === "CLARIFICATION") await cancelPendingAction(user.id, telegramUserId);
+    await reply(chatId, renderFinanceAnswer(await queryTelegramFinance(user.id, telegramUserId, result.query)));
+    return;
+  }
   if (!continuation && result.kind === "UNSUPPORTED" && pending?.kind === "PROPOSAL" && /^(ya|yes|ok|sahkan)$/i.test(text)) {
     await reply(chatId, "Tekan butang Sahkan pada cadangan tertentu untuk menyimpan. /cancel untuk batal.");
     return;
