@@ -408,3 +408,47 @@ the extra GitHub callback is added and saved bot credentials locally. Computer
 use stopped on unverifiable Windows browser URL, so do not automate around that
 safeguard or fabricate a session. Validate/register Telegram through its official
 API with bounded, secret-redacted requests and verify real owner flows separately.
+
+## 2026-11-15 — Phase 5 complete
+
+The final Telegram-enabled production deployment is READY and promoted:
+`dpl_F4skacS8mqYwV3KKr8WdsXChoCsL`, source
+`9bd3995bc28f21530a440ea7f59d34048343598a`. Its source CI run 43702137694
+passed every step, including 316 unit/integration tests and 28 browser tests.
+Public readiness and anonymous authorization checks passed again after release;
+fourteen deployed public HTML/JS resources contain none of the configured app
+credentials checked. This is bounded verification, not a security certification.
+
+Telegram's official API validated the owner's bot credentials and registered
+the canonical HTTPS webhook with a generated secret, message/callback filters
+and one connection. Public missing-secret/valid-secret unsupported-body probes
+returned 401/200. After the owner's live smoke, getWebhookInfo still reported
+zero pending updates and no delivery error; the recent five-minute request scan
+contained no 5xx records. Credentials stayed in ignored local/server secret
+storage and never appeared in command arguments, output or screenshots.
+
+The owner explicitly confirmed their real production dashboard opened, then
+reported all requested live checks passed: web create/edit/delete, Telegram
+link/Start, one synthetic confirmed expense, re-tap without duplicates, and
+sign-out/re-login. These are owner-confirmed UI results, separate from the
+agent's automated HTTP/browser/provider-status checks. Real auth and authorized
+synthetic finance writes naturally occurred during those flows; no production
+fixture migration, auth bypass or account impersonation was used. Live unlink
+was not repeated; its authorization/invalidation regressions remain automated.
+
+Phase 5 closes with the free deterministic parser. Gemini credentials, dashboard
+setup and live calls remain unapproved; free-tier provider terms and project
+quotas must be rechecked if a later request authorizes them. No Stretch feature,
+paid service, automatic Git publishing or extra backend was introduced.
+
+## 2026-11-15 — Shared MCP verification complete
+
+On the subsequent chat turn the new shared Vercel tools loaded and confirmed
+the same `shahrilyusoff11` account and Hobby workspace used by the CLI. A team
+grant was still required independently of account login. The owner completed
+the SY grant; an immediate read remained forbidden, and a bounded later retry
+on that same connection succeeded. The brief 403's cause was not established.
+Documentation search, authenticated `list_teams` returning SY and explicit
+known-team `get_project` for DuitFlow now pass. The earlier tool-catalogue/access
+limitation is closed without reconnecting, removing other servers, exposing
+tokens or weakening mutation confirmations. Vercel agent setup is complete.

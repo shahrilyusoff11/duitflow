@@ -21,10 +21,11 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
   15 November 2026; its local implementation/evidence is in docs/STATUS.md.
   The owner requested Phase 4 free-tier AI implementation on 15 November 2026.
   Its implementation/evidence is in docs/STATUS.md. The owner requested Phase 5
-  polish/demo/deployment preparation on 15 November 2026. Complete local work,
-  The owner approved Vercel deployment, provider setup and publishing in chat on
-  15 November 2026. Complete the approved free-only deployment without asking
-  for that approval again. Gemini setup/live calls remain excluded.
+  polish/demo/deployment on 15 November 2026 and approved Vercel/provider setup
+  and publishing. Phase 5 is complete: hosted checks and GitHub CI pass, and the
+  owner confirmed real production OAuth, web CRUD, Telegram linking/approval,
+  replay protection and sign-out/re-login. Do not request the same setup approval
+  again. Gemini setup/live calls remain excluded.
   Stop before Stretch features. See docs/DEPLOYMENT.md for the release workflow.
   The checkout is linked to Vercel Hobby `sy-74fc/duitflow`; the public origin is
   https://duitflow-lyart.vercel.app. See docs/VERCEL_SETUP.md and docs/STATUS.md for
@@ -40,6 +41,10 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
 - GitHub OAuth credentials are configured locally; real sign-in, sign-out,
   protected-page redirect and re-login were verified on 15 November 2026. Never
   print credentials, impersonate another user, or bypass real sessions.
+- Production OAuth reuses the approved credentials and auth encryption secret;
+  the owner added the production callback without removing localhost. Telegram
+  is configured locally and in Vercel Production, with a secret-protected webhook.
+  Never expose those values or copy production secrets into previews/tests.
 - Do not start Phase 2 until all Phase 1 acceptance checks pass, including real
   OAuth sign-in, scoped server session checks, and PostgreSQL migration checks.
 - Ask before account/API-key dependencies or dashboard actions. Never provision

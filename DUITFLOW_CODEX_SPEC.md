@@ -343,16 +343,19 @@ See docs/AI_SETUP.md and docs/STATUS.md. Gemini setup/live calls remain gated.
 
 **Done when:** the demo link works, the bot works, and README lets another developer run it.
 
-**Local implementation evidence (15 November 2026):** Phase 5 local polish,
+**Phase 5 evidence (15 November 2026):** Phase 5 local polish,
 public read-only synthetic `/demo`, screenshots and deployment runbook are
 implemented. Lint, typecheck, 316 unit/integration tests (including 45/45 mocked
 AI golden cases), production build and 28 desktop/mobile browser tests pass.
 No account session or real user data is exposed by the public snapshot.
-The owner approved deployment/setup; the public HTTPS web release and hosted
-Neon readiness now pass. Production webhook and real hosted OAuth/Telegram
-smoke checks are in progress. See docs/STATUS.md for current release IDs.
-Gemini credential setup/live calls remain separately unapproved. Overall Phase 5
-deployment acceptance is open. See docs/DEPLOYMENT.md and docs/STATUS.md.
+The approved Vercel Hobby HTTPS release, hosted Neon/browser readiness, public
+webhook secret probes and official Telegram registration checks pass. The owner
+confirmed real GitHub sign-in, web CRUD, Telegram linking, one confirmed synthetic
+expense, repeated-button duplicate prevention and sign-out/re-login in their own
+sessions. CI for the deployed source passes all steps (316 tests, 28 browsers).
+Phase 5 is complete; distinguish automated evidence from owner-confirmed live
+flows in docs/STATUS.md. Gemini setup/live calls remain separately unapproved.
+See docs/DEPLOYMENT.md and docs/VERCEL_SETUP.md for exact release/setup details.
 Stop before Stretch.
 
 ### Stretch (after Phase 5, each optional)
@@ -364,7 +367,7 @@ Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram 
 - [x] Transaction CRUD works; amounts are precise; money strings are parsed per §4.4.
 - [x] Dashboard shows correct monthly income/expense/net using KL dates, including month-boundary cases.
 - [x] Budgets behave consistently; planned commitments (if built) are never double-counted.
-- [x] Telegram links/unlinks securely; unlink invalidates pending actions (local automated evidence; live setup pending).
+- [x] Telegram links/unlinks securely; unlink invalidates pending actions (local automated evidence; live linking/approval owner-confirmed, live unlink not repeated).
 - [x] Webhook rejects bad secrets (`401`), ignores non-private chats, and returns `200` for authentic unsupported updates.
 - [x] A retry after a failed/timed-out update is processed, not dropped; a replay after success is ignored.
 - [x] Linked user can submit one or multiple transactions through deterministic grammar or optional consented AI; missing amount/category/date clarification resolves follow-up replies (mocked AI evidence).
@@ -380,7 +383,7 @@ Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram 
 - [x] Deployed on Vercel Hobby with existing Neon Free for small personal non-commercial use; no paid service enabled.
 - [x] README covers setup, env vars, architecture, testing, gated deployment, token rotation, privacy/PDPA note and known free-tier limitations.
 - [x] Public read-only synthetic demo, responsive/accessibility polish and screenshots verified locally.
-- [ ] Phase 5 public demo URL, production webhook and live sign-in/web/Telegram confirmation acceptance verified after approval.
+- [x] Phase 5 public demo URL and production webhook checked automatically; live sign-in/web/Telegram confirmation and replay acceptance confirmed by the owner after approval.
 
 ## 13. Environment variables
 

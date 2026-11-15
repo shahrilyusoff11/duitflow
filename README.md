@@ -8,13 +8,15 @@ UI uses Bahasa Melayu, MYR and Malaysian calendar dates.
 
 **Live on Vercel Hobby:** [DuitFlow](https://duitflow-lyart.vercel.app) ·
 [read-only demo](https://duitflow-lyart.vercel.app/demo).
-Phase 5 local checks and hosted browser-to-Neon readiness pass. Production
-GitHub login and Telegram delivery still need owner verification before Phase 5
-can close. Gemini credential setup and live calls remain unapproved. No paid
-services or Stretch features are introduced.
+**Phase 5 is complete.** Local/CI checks and hosted browser-to-Neon readiness
+pass. The owner confirmed real GitHub sign-in/out/re-login, synthetic web CRUD,
+Telegram linking and one confirmed bot expense with no duplicate on re-tap.
+Bot: [@duitflow00bot](https://t.me/duitflow00bot). Gemini credential setup and
+live calls remain unapproved and disabled. Stretch is unstarted; no paid service
+was enabled.
 
 - [Implementation evidence and acceptance status](docs/STATUS.md)
-- [Actual Vercel setup and remaining owner steps](docs/VERCEL_SETUP.md)
+- [Actual Vercel setup and release record](docs/VERCEL_SETUP.md)
 - [Deployment plan and approval checklist](docs/DEPLOYMENT.md)
 - [Specification](DUITFLOW_CODEX_SPEC.md) and [technical decisions](docs/DECISIONS.md)
 
@@ -25,8 +27,8 @@ open [the local demo](http://localhost:3000/demo). It displays
 clearly labeled synthetic transactions and budgets without a database or
 provider credentials. It has no session, account, write access, Telegram linking
 or AI dispatch, and never reads anyone's financial records. Sign in separately
-through GitHub to use the real application. Real production OAuth verification
-remains pending real sign-in; the owner confirmed the additional callback.
+through GitHub to use the real application. The owner confirmed the production
+callback and real sign-in; demo data remains separate from their account.
 
 ![Read-only synthetic demo on desktop](docs/screenshots/demo-desktop.png)
 
@@ -222,8 +224,8 @@ sessions and explicitly override all three DB URL aliases and AI configuration.
 Provider HTTP is mocked; CI makes no live AI calls. The app contains no test
 login endpoint or session bypass.
 
-[Release CI run 43701079034](https://github.com/shahrilyusoff11/duitflow/actions/runs/43701079034)
-passed on deployed source `ade424e3575464738a3e926a748ef5be81a74981`: install,
+[Release CI run 43702137694](https://github.com/shahrilyusoff11/duitflow/actions/runs/43702137694)
+passed on deployed source `9bd3995bc28f21530a440ea7f59d34048343598a`: install,
 schema validation, disposable PostgreSQL migrations, lint, typecheck,
 **316 tests**, production build and **28 browser tests**. CI uses Node 24;
 the Vercel release uses Node 26.x. [STATUS.md](docs/STATUS.md) records the initial
@@ -236,16 +238,23 @@ demo and sign-in return 200; anonymous profile access returns 401 and dashboard
 access redirects to sign-in. The hosted headless `verify:app` check passed
 browser → readiness handler → Prisma → existing Neon, with zero client errors.
 Generated deployment URLs remain protected; no Git auto-deploy integration is
-configured. A checked five-minute runtime-log window contained a `pg` SSL-mode
+configured. An earlier five-minute runtime-log window contained a `pg` SSL-mode
 future-deprecation warning on a healthy readiness request, with no observed
-request failures. This is not a claim of zero runtime log entries.
+request failures. After the owner smoke, hosted readiness passed again with
+zero browser errors; the final deployment's recent five-minute request-log
+window had zero HTTP ≥500 requests, and a targeted check of 14 public HTML/JS
+files found no configured app credential values. These bounded results are not
+an uptime guarantee, exhaustive audit or claim of zero runtime log entries.
 
 The [deployment runbook](docs/DEPLOYMENT.md) covers env scopes, secure webhook
-registration, live synthetic acceptance and rollback. The owner still needs to
-add the canonical GitHub callback while retaining localhost, complete real
-production login, and provide BotFather credentials or explicitly skip the bot.
-No registered live webhook or working bot is claimed. See
-[the actual setup record](docs/VERCEL_SETUP.md).
+registration, live synthetic acceptance and rollback. Production webhook
+authentication probes passed (missing secret 401, correct secret/empty update
+200), and Telegram confirmed its canonical URL and update filters. The owner
+separately confirmed actual production OAuth, web CRUD, private Telegram linking,
+Sahkan saving exactly one expense and re-tap creating no duplicate. This owner
+report is distinct from headless readiness/CI evidence. Live unlink was not part
+of that smoke check; its existing automated tests pass. See
+[the setup record](docs/VERCEL_SETUP.md).
 
 Target: RM0/month for a small personal, non-commercial portfolio on Vercel Hobby
 and Neon Free. No paid domain, card, upgrade or paid fallback. Recheck changing

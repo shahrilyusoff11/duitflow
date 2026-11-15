@@ -1,24 +1,29 @@
-# Phase 5 deployment runbook — web release live
+# Phase 5 deployment runbook — complete
 
 Updated on 15 November 2026. The approved Vercel Hobby web release is live at
 [DuitFlow](https://duitflow-lyart.vercel.app), including
 [the read-only synthetic demo](https://duitflow-lyart.vercel.app/demo).
-Hosted readiness and anonymous denial pass. Real production OAuth login and
-Telegram delivery remain pending owner action. Existing Neon/local auth are
-preserved, and Gemini remains disabled. See [the setup record](VERCEL_SETUP.md)
-and [full verification evidence](STATUS.md).
+Hosted readiness and anonymous denial pass. The owner confirmed real production
+OAuth, synthetic web CRUD, Telegram linking/approval and no duplicate on re-tap.
+Phase 5 is complete. Existing Neon/local auth are preserved, Gemini remains
+unapproved and disabled, and Stretch is unstarted. See
+[the setup record](VERCEL_SETUP.md) and [full verification evidence](STATUS.md).
 
 ## Current release evidence
 
 | Item | Actual result |
 | --- | --- |
 | Vercel scope / project | Hobby `SY` / `sy-74fc`; `duitflow` / `prj_3N2G8nhG2CQIMOaMGFSPxwLhStRQ` |
-| Source / deployment | `ade424e3575464738a3e926a748ef5be81a74981`; `dpl_r7u4LcdzNNBGdrcrjbbPHQCxggEA`, **READY** |
-| Build / runtime | Basic 2 vCPU / 8 GB, **1m 53s**; Node **26.x**, function region `cle1` |
+| Source / deployment | `9bd3995bc28f21530a440ea7f59d34048343598a`; `dpl_F4skacS8mqYwV3KKr8WdsXChoCsL`, **READY**, promoted |
+| Build / runtime | Basic 2 vCPU / 8 GB, **1m 46s**; Node **26.x**, function region `cle1` |
 | Canonical public origin | [duitflow-lyart.vercel.app](https://duitflow-lyart.vercel.app) |
-| Protected generated URL | `https://duitflow-5v7l9rcfp-sy-74fc.vercel.app` |
-| Release CI | [43701079034](https://github.com/shahrilyusoff11/duitflow/actions/runs/43701079034), all required steps pass; **316 tests / 28 browser tests** |
+| Protected generated URL | `https://duitflow-2wdmuqaex-sy-74fc.vercel.app` |
+| Release CI | [43702137694](https://github.com/shahrilyusoff11/duitflow/actions/runs/43702137694), all required steps pass; **316 tests / 28 browser tests** |
 | Release method | Reviewed manual CLI staging/promotion; no Git auto-deploy integration |
+
+The first web release used `ade424e3575464738a3e926a748ef5be81a74981` and
+`dpl_r7u4LcdzNNBGdrcrjbbPHQCxggEA`; the current source is its docs-only successor
+with the approved Production Telegram configuration enabled.
 
 CLI-authorized staged checks passed before promotion: `/`, `/demo`, `/sign-in`
 200; `/api/profile` 401; `/dashboard` 307; health 200. Raw unauthenticated
@@ -27,6 +32,18 @@ and configured security headers. `verify:app` against the canonical origin
 passed a real headless browser → health → Prisma → Neon check, anonymous
 redirect/profile denial and zero client errors. These checks do not prove
 real OAuth login, finance writes or bot delivery.
+
+Separately, official webhook registration/status checks confirmed the canonical
+webhook URL, `message`/`callback_query` updates, one delivery connection, zero
+pending updates and no delivery error at registration. Public secret probes
+returned 401 without the secret and 200 for an authenticated empty update. The
+owner explicitly confirmed the real UI/chat smoke results recorded in §7.
+After that smoke, webhook status still matched with zero pending updates and
+no delivery error, and hosted `verify:app` passed again with zero browser errors.
+The final deployment's recent five-minute request-log window contained zero
+HTTP ≥500 requests with no excluded intervals; a targeted scan of 14 public
+HTML/JavaScript files found no configured application credential values.
+These bounded checks are not an uptime guarantee or security certification.
 
 Generated/preview deployment protection stays enabled. CLI access automatically
 created a platform protection-bypass secret; its value was never printed or
@@ -123,6 +140,12 @@ each value. Env changes require a new deployment.
 | `TELEGRAM_WEBHOOK_SECRET` | 32–256 random `A-Z a-z 0-9 _ -` characters | Omit |
 | `TELEGRAM_BOT_USERNAME` | Actual username without `@` | Omit |
 
+Final project-metadata verification confirmed `DATABASE_URL`,
+`BETTER_AUTH_SECRET`, `GITHUB_CLIENT_SECRET`, `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_WEBHOOK_SECRET` are Secret/sensitive and Production-only. No values
+were printed. Hosting contains no `GEMINI_API_KEY`, `DATABASE_URL_UNPOOLED` or
+`DIRECT_URL`; preserve those boundaries on future releases.
+
 Leave `GEMINI_API_KEY` absent and `GEMINI_FREE_TIER_CONFIRMED` absent or `no`.
 Do not enable Gemini. Deterministic flows work without a key; a later request
 must separately approve [AI setup](AI_SETUP.md).
@@ -151,8 +174,9 @@ all plans and excludes production domains; confirm its active scope in
 The existing GitHub credentials are already scoped to Vercel Production. The
 owner was asked to open **GitHub → Settings → Developer settings → OAuth Apps →
 the existing DuitFlow app** and add the canonical callback while retaining the
-working localhost callback. The owner confirmed that callback is added. Real
-production login is still pending; no new OAuth app or client secret is required.
+working localhost callback. The owner confirmed that callback is added, the
+production dashboard opens, and sign-out/re-login passes. No new OAuth app or
+client secret was required.
 
 | Field | Value |
 | --- | --- |
@@ -163,9 +187,10 @@ Leave the working local credentials unchanged. Do not add wildcard preview
 origins, broaden trusted origins or enable password login. GitHub supports
 multiple registered callback URLs; see
 [current OAuth registration steps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
-Complete real sign-in/out/re-login in the owner's browser, then the synthetic
-web-finance check. Computer-use safety stopped Windows browser URL verification,
-so the agent did not operate the owner's UI or impersonate a session.
+The owner completed real sign-in/out/re-login and the synthetic web-finance
+check. Computer-use safety stopped Windows browser URL verification, so this
+live UI evidence is owner-confirmed; the agent did not operate the owner's UI
+or impersonate a session. Repeat those checks after future auth releases.
 
 ## 5. Review migrations separately, then publish
 
@@ -198,12 +223,12 @@ URLs do not replace app session checks.
 
 ## 6. Owner: create and register Telegram
 
-Bot setup is authorized, but token/username are absent. The owner was asked to
-use official [BotFather](https://t.me/BotFather), save the token and username in
-ignored `.env`, or explicitly skip the bot; the response is pending. Never send
-the token through chat or a browser URL. Once supplied, generate the webhook
-secret, configure all three server variables in approved Production storage and
-redeploy reviewed code. No live webhook is registered or bot delivery claimed.
+The owner supplied BotFather credentials directly in ignored `.env`; `getMe`
+validated [@duitflow00bot](https://t.me/duitflow00bot). The bot token, random
+webhook secret and username are configured only in approved Production scopes.
+The final release is deployed and its webhook registered. Never send the token
+through chat or a browser URL. Preserve existing configuration; the steps below
+are the repeatable procedure for an approved environment or credential rotation.
 
 Before registration, POST to the deployed webhook without a secret: expect
 401. A missing server configuration gives 503 and must be fixed first. A correct
@@ -235,25 +260,24 @@ Use the owner's real browser session and private bot chat with synthetic data.
 Complete real OAuth normally; no impersonation, fake cookie or demo write
 access. Keep Gemini disabled throughout.
 
-The public landing/demo/readiness and anonymous denial checks already passed
-as recorded above. Production OAuth, authenticated web writes and Telegram
-checks below remain pending and must not be inferred from readiness or CI.
+The owner replied **“ALL CHECKS PASSED”** to the exact final smoke request:
+Settings link/Start, synthetic RM12 expense/Sahkan, exactly one visible web row,
+re-tap without duplication, separate web expense add/edit/delete, and
+sign-out/re-login. This owner-performed evidence is separate from automated
+readiness and CI. Approved real auth and synthetic finance/bot writes occurred.
 
-| Check | Expected evidence |
+| Check | Evidence and limit |
 | --- | --- |
-| Landing and `/demo`, desktop/mobile | Render; synthetic/read-only notice; no personal records or overflow |
-| Anonymous finance and Settings | Sign-in redirect; `/api/profile` 401 |
-| `/api/health` | 200 with readiness fields only |
-| Real GitHub sign-in/out/re-login | Own data only; sign-out blocks protected pages |
-| Web finance | Add/view/edit synthetic expense; correct month totals/budget warning; delete after verification |
-| Settings Telegram link | Ten-minute single-use link redeems privately; connection appears |
-| `/balance`, `/budget`, `/report` | Match stored web records for the Malaysian month |
-| `Makan RM12` | Proposal; no row before Sahkan; one TELEGRAM row after approval |
-| Tap Sahkan again | No duplicate financial write |
-| Missing amount and Batal | Clarification resolves; canceled/old buttons cannot write |
-| Unlink | Old buttons/links and financial commands denied; web records preserved |
-| Bad secret and group update | Bad secret 401; no financial disclosure outside private chat |
-| AI off with no key | Deterministic intake works; no live AI request |
+| Landing/demo/readiness and anonymous denial | Automated hosted HTTP/headless checks passed; desktop/mobile UI also covered locally/CI |
+| Real GitHub dashboard, sign-out/re-login | Owner-confirmed passed |
+| Synthetic web expense add/edit/delete | Owner-confirmed passed; month totals/budget warnings retain automated evidence |
+| Settings link → private bot Start | Owner-confirmed passed |
+| Synthetic RM12 expense → Sahkan | Owner confirmed exactly one expense visible on web |
+| Re-tap the same approval | Owner confirmed no duplicate |
+| Missing-secret/correct-secret empty update | Public probes returned 401/200 |
+| `/balance`, `/budget`, `/report`, clarification and Batal | Existing local automated evidence; no additional live check claimed |
+| Unlink, expiry, cross-account and group denial | Existing local automated evidence; no live unlink check claimed |
+| AI off/no key | Deterministic live intake worked; Gemini remains unapproved and disabled |
 
 `verify:app` supports a hosted target via `APP_VERIFY_URL` and checks landing,
 readiness and anonymous denial. It does not perform consent, mutations or bot
@@ -262,8 +286,9 @@ delivery; its success alone does not complete Phase 5.
 Record date, deployment commit/URL and each actual pass/fail in STATUS.md.
 Separate real delivery from mocks. Evidence must exclude names, email, cookies,
 tokens, link payloads, bot IDs and raw financial messages. Remove synthetic
-records through normal authorized UI actions. Mark Phase 5 complete only when
-the public demo and live core flows pass. Stretch remains excluded.
+records through normal authorized UI actions. Phase 5 is complete on the
+automated and owner-confirmed evidence above. This table is the regression
+baseline for future approved releases; Stretch remains excluded.
 
 ## Rollback, rotation and operating limits
 
