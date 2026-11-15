@@ -19,6 +19,9 @@ const environment = {
   BETTER_AUTH_SECRET: "synthetic-browser-test-secret-at-least-32-characters",
   GITHUB_CLIENT_ID: "synthetic-browser-client",
   GITHUB_CLIENT_SECRET: "synthetic-browser-client-secret",
+  TELEGRAM_BOT_TOKEN: "123456:synthetic-telegram-token-longer-than-twenty",
+  TELEGRAM_WEBHOOK_SECRET: "synthetic-telegram-webhook-secret-longer-than32",
+  TELEGRAM_BOT_USERNAME: "DuitFlowTestBot",
   NEXT_TELEMETRY_DISABLED: "1", VERCEL: "",
 };
 
@@ -49,11 +52,15 @@ try {
   });
   if (migrationCode !== 0) throw new Error("Browser test migration failed");
 
-  for (const project of ["desktop", "mobile", "finance-desktop", "finance-mobile"]) {
+  for (const project of ["desktop", "mobile", "finance-desktop", "finance-mobile", "telegram-desktop", "telegram-mobile", "telegram-linked-desktop", "telegram-linked-mobile"]) {
     await embedded.query(`INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES ($1, $2, $3, now())`,
       [`browser-${project}`, `${project === "desktop" ? "Desktop" : "Mobile"} Test`, `${project}@example.test`]);
     await embedded.query(`INSERT INTO "Session" ("id", "token", "userId", "expiresAt", "updatedAt") VALUES ($1, $2, $3, now() + interval '1 hour', now())`,
       [`browser-session-${project}`, `browser-token-${project}`, `browser-${project}`]);
+  }
+  for (const [device, telegramUserId] of [["desktop", "900000001"], ["mobile", "900000002"]]) {
+    await embedded.query(`INSERT INTO "TelegramConnection" ("id", "userId", "telegramUserId") VALUES ($1, $2, $3)`,
+      [`browser-telegram-connection-${device}`, `browser-telegram-linked-${device}`, telegramUserId]);
   }
   application = spawn(process.execPath, [require.resolve("next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", "3100"], {
     env: environment, stdio: "inherit", windowsHide: true,

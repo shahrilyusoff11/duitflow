@@ -1,8 +1,94 @@
 # Implementation status — 15 November 2026
 
-**Phases 1 and 2 are complete. Phase 3 has not started.** Phase 2 was explicitly
-requested by the owner and verified locally; no new provider/service setup,
-schema migration or live Neon write was performed.
+**Phases 1 and 2 are complete. Phase 3 is implemented and verified locally.**
+The owner requested Telegram integration only. Stop before Phase 4. No AI,
+provider/account setup, hosting deployment, schema migration or live Neon write
+was performed. Live Telegram setup/verification remains an owner step.
+
+## Phase 3 Telegram — implemented and verified locally
+
+- [x] Protected Settings with ephemeral ten-minute URL-safe link payloads;
+  only SHA-256 hashes persist. Tokens are single-use and replaced atomically.
+  Telegram identity/account conflicts preserve the existing connection.
+- [x] Unlink removes the connection and consumes all outstanding actions/tokens.
+  User row locks serialize unlink, link redemption, scoped bot reads and approval.
+  Browser actions/DAL retain independent real session checks. Bot DAL operations
+  require userId and recheck the live private-sender connection themselves.
+- [x] Webhook authenticates its secret with constant-time digest comparison
+  before streamed body-size/JSON/Zod validation. Private sender/chat IDs must
+  match. Authentic malformed/unsupported/non-private updates return 200 without
+  financial processing; missing/wrong secrets return 401.
+- [x] PostgreSQL update leases handle RECEIVED/PROCESSING/DONE/FAILED, attempts,
+  stale locks and fenced completion. DONE replays return 200. Active leases and
+  transient failures return 503 so a killed invocation cannot lose its retry.
+- [x] Phase 3 uses the spec's immediate processing-message alternative: bounded
+  deterministic work runs before HTTP success, with four-second Telegram fetch
+  deadlines and a 30-second route duration. Next.js after() handles cleanup only.
+  No update payload inbox, slow AI work or paid service is introduced.
+- [x] Commands /start, /help, /link, /balance, /budget, /report, /cancel.
+  Financial commands are fixed scoped queries over stored records and accept an
+  optional YYYY-MM. Recorded net is clearly labeled income minus expenses.
+- [x] Deterministic single/multiple explicit purchases, exact money parsing,
+  Malaysian dates and amount/category clarification. Unknown language receives
+  guidance; no inferred write or casual-yes approval exists.
+- [x] Inline Sahkan/Batal callbacks contain only an action code and UUID; all
+  callback paths attempt answerCallbackQuery. Approval validates owner/sender,
+  kind, expiry and categories, consumes once and writes all transactions in one
+  transaction; success replies use actual committed DB values.
+- [x] Stable action UUIDs per sender/update reuse the persisted proposal on
+  message retry, including after approval committed. Cancelled/expired actions
+  cannot become new approvable proposals. No duplicate financial writes.
+- [x] Bounded lazy cleanup retains DONE update IDs and action tombstones for
+  seven days (actions: seven days after expiry), and expired link tokens for one
+  day. At most 100 rows per table per successful update; no cron dependency.
+- [x] Auth, Neon configuration, finance behavior, three migrations, composite
+  constraints, partial index and atomic signup trigger preserved. No new package.
+- [x] README, AGENTS, decisions, specification checklist, optional env validation
+  and [Telegram setup/rotation/live-check guide](TELEGRAM_SETUP.md) updated.
+
+Executed on Windows / Node 26.11.1, npm 11.20.0:
+
+| Phase 3 check | Actual result |
+| --- | --- |
+| npm run db:validate | Passed |
+| npm run setup:check | Passed; no values printed; no connectivity claim |
+| npm run lint | Passed, no warnings |
+| npm run typecheck | Passed |
+| npm test | **227 passed** across 12 files (126 new Phase 3 tests) |
+| npm run build | Passed; settings and webhook dynamic |
+| npm run test:e2e | **18 passed**, desktop/mobile Chromium, 6 workers |
+| Visual review | Synthetic Settings desktop/mobile screenshots inspected; overflow assertions passed |
+| git diff --check | Passed |
+| Secret/config preservation | .env/generated artifacts ignored; no auth/finance/schema/Neon/package changes |
+
+The disposable-database integration suite executes webhook -> real processor ->
+scoped DAL -> Prisma/pg/PostgreSQL with mocked Telegram transport. It verifies
+single-use/expired/replaced/conflicting links, real web session and action
+authorization, unlink invalidation, private/unlinked denial, clarification and
+commands, failed/stale/busy leases, callback expiry/cross-account checks, atomic
+multi-row rollback, double taps, and a simulated completion failure followed by
+approval and message retry. The last case preserves one action and one financial
+write. Unit tests exercise streamed size limits, secret ordering, schemas,
+bounded/redacted transport, parser cases and callback-error preservation.
+
+Browser checks exercise actual Settings server actions, deep-link format and
+replacement, explicit unlink confirmation, reload token removal and anonymous
+redirects, alongside all existing auth/finance flows. All three DB URL aliases
+are explicitly overridden to disposable test storage; synthetic Telegram config
+also overrides the host environment. No live credentials are used in fixtures.
+
+Initial integration checks exposed Prisma's void advisory-lock return type;
+using executeRaw fixed it. Review additionally found and fixed active-lease retry
+loss, callback acknowledgment error masking and proposal replacement on message
+retry. These are covered by regression tests.
+Final input review also added regressions for negative/signed or word-embedded
+money suffixes and an uppercase cancel code that must never trigger approval.
+
+No Phase 3 remote CI run, real bot delivery, public HTTPS registration, hosting
+duration measurement, new live OAuth or live Neon check is claimed. Outbound
+messages can be repeated/uncertain after network timeouts, while financial writes
+stay atomic and idempotent. Provider setup and a live synthetic Telegram smoke
+check remain necessary before public use. Phase 4 and Stretch remain unstarted.
 
 ## Phase 2 finance MVP — implemented and verified locally
 
@@ -59,7 +145,7 @@ the final tests wait for the transaction detail heading before entering edits.
 No Phase 2 remote CI run or live Neon finance CRUD verification is claimed.
 Phase 1 real OAuth/Neon evidence below remains valid; no credentials, provider
 settings or production financial records were changed. Telegram, AI, deployment
-and Stretch are not implemented. Stop before Phase 3.
+and Stretch were not implemented at that checkpoint; see Phase 3 above.
 
 ## Phase 1 completion record
 
@@ -195,6 +281,6 @@ The GitHub connector confirmed the completed run and every required step.
 All Phase 1 acceptance checks now pass. Completion/status documents were updated
 locally after this verified run; no application or workflow code changed.
 
-At that checkpoint Phases 2–5 and Stretch were unstarted. Phase 2 has since been
-implemented and verified as recorded above. Phases 3–5, golden-set fixtures,
-demo/deployment acceptance and Stretch remain unstarted.
+At that checkpoint Phases 2–5 and Stretch were unstarted. Phases 2 and 3 have
+since been implemented and verified locally as recorded above. Phases 4–5,
+golden-set fixtures, demo/deployment acceptance and Stretch remain unstarted.

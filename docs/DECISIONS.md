@@ -173,3 +173,86 @@ identities are isolated from sign-out tests. All three database URL variables
 remain explicitly overridden in the browser launcher. No live Neon checks or
 real financial writes were performed for Phase 2; live auth/Neon evidence remains
 the Phase 1 record. Phase 3 remains unstarted.
+
+## 2026-11-15 — Phase 3 Telegram scope and identity boundary
+
+The owner requested Phase 3 only. Retain Better Auth, Neon, finance and the three
+reviewed migrations. Existing Telegram models support this phase without schema
+changes or new npm packages. No AI/provider client, account creation, dashboard
+operation, hosting deployment or paid service was introduced. Phase 4 stays gated.
+
+Browser Settings and its actions independently verify real database sessions;
+the Settings DAL also verifies its required userId. A bot request has a different
+identity boundary: a constant-time verified webhook secret, bounded Zod update,
+non-bot sender and private chat whose ID matches that sender. The bot resolves
+userId from the persisted unique connection, and every bot DAL entry rechecks
+that connection inside its own transaction. It never creates a browser session
+or calls the web finance DAL with an auth bypass. Browser-supplied Telegram IDs
+and user IDs do not authorize anything.
+
+Generate 32 random bytes as a 43-character base64url link token. Store SHA-256,
+expire after ten minutes and consume atomically. New tokens invalidate older
+tokens. Redemption also takes a Telegram-identity advisory lock and user row
+lock; unique constraints preserve one identity per account with no silent relink.
+The shared user row lock serializes unlink, approval and scoped reads/mutations.
+Unlink deletes the connection and consumes outstanding links and pending actions.
+Demo users cannot link or operate the bot.
+
+## Telegram timing, retry and idempotency choices
+
+Read the installed Next.js route-handler, Server Action and after() guides before
+coding. Next.js after() extends an invocation only within its configured platform
+duration; it is not a durable queue. Telegram retries unsuccessful webhook HTTP
+responses. Returning 200 before an in-memory worker completes would lose work if
+the invocation dies, because the existing state table has no durable raw inbox.
+
+Use §4.7's immediate “Sedang memproses…” alternative in Phase 3: execute only
+bounded deterministic work before returning HTTP success. Fetch calls time out
+after four seconds; the route declares maxDuration=30. after() runs housekeeping
+only. This preserves genuine 503/Telegram retry semantics without storing raw
+updates, adding a broker or provisioning a service. No hosted timing benchmark
+is claimed. Phase 4 must revisit slow parsing/post-response durability before
+adding any AI work; this phase adds no AI infrastructure in anticipation.
+
+Official sources checked on 15 November 2026:
+[Telegram setWebhook](https://core.telegram.org/bots/api#setwebhook),
+[deep links](https://core.telegram.org/bots/features#deep-linking),
+[callback data](https://core.telegram.org/bots/api#inlinekeyboardbutton), and
+[Vercel function duration](https://vercel.com/docs/functions/configuring-functions/duration).
+The current Vercel Fluid Compute Hobby maximum is 300 seconds; our 30-second
+setting is conservative and does not activate a plan, deployment or billing.
+
+Update claims use PostgreSQL advisory locks and incrementing attempt leases.
+Failed/stale/received updates resume; DONE replays are ignored with 200. Recent
+PROCESSING duplicates do no extra work but return retryable 503 rather than 200:
+this deliberately tightens the brief's “ignore recent processing” response to
+avoid acknowledging the retry of a worker killed before its 60-second lease
+expires. Completion checks the attempt and lock timestamp; a stale worker cannot
+complete a newer lease. Permanent Telegram request/chat rejections (400/403)
+stop retrying; transient/uncertain upstream, configuration and DB failures do not.
+
+Each intake update uses a stable UUID derived from its sender/update ID as the
+pending action key, with ownership checked separately. A retry reuses the
+persisted proposal/clarification and exact original buttons. An already consumed
+or expired receipt cannot create another proposal, including when approval
+committed before the original intake's completion failed. Callback approval
+atomically consumes the unexpired owner/sender-scoped PROPOSAL and inserts all
+rows. Category owner/type checks and composite foreign keys remain active. Reply
+with saved DB values only after commit. A callback-acknowledgment failure cannot
+mask an earlier retryable processing failure. Replies can repeat or be uncertain
+after network timeouts; finance writes remain idempotent.
+
+Normal successful webhook requests opportunistically delete at most 100 DONE
+updates older than seven days, 100 pending actions expired more than seven days
+ago and 100 link tokens expired more than one day ago. Action tombstones cover
+the update replay window; failed/processing updates remain retryable. No cron,
+shared finance cache or raw-message logs. Deployment/live Telegram verification
+is explicitly separate from disposable PostgreSQL and mocked-transport evidence.
+
+The deterministic grammar supports explicit money suffixes, a conservative
+category keyword map, server-resolved Malaysian dates and explicit purchase
+separators. Unknown categories ask for an exact personal category name; ambiguous
+or missing money asks for an amount. Unsupported language gets guidance. There
+is no AI, casual-yes approval, proposal editing or arbitrary financial query
+language. Commands select only fixed scoped database reads. AI Q&A, provider
+consent, rate caps and the mocked AI golden set remain Phase 4.

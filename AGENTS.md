@@ -17,7 +17,9 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
 - Phase 1 is complete: live OAuth/Neon checks and GitHub CI passed on commit
   108874011e8af3f8fe733297b650ef3ee20749ba (run 43630396318). The owner requested
   Phase 2 web finance on 15 November 2026; its implementation and local evidence
-  are recorded in docs/STATUS.md. Stop before Phase 3 unless requested.
+  are recorded in docs/STATUS.md. The owner requested Phase 3 Telegram on
+  15 November 2026; its local implementation/evidence is in docs/STATUS.md.
+  Stop before Phase 4 unless requested. No AI or paid service is authorized.
   The owner approved Better Auth + GitHub-only OAuth +
   PostgreSQL database sessions in chat on 15 November 2026. Implement this scope
   without asking for the same approval again. See `docs/AUTH_PROPOSAL.md`.
@@ -71,6 +73,8 @@ is required for lint, tests, typecheck, generate, or build.
 - `src/lib/config/`: validation that does not log values or secrets.
 - `src/lib/db/`: server-only low-level connection; import only in auth or DAL.
 - `src/lib/finance/`: scoped finance DAL, money/date validation and aggregates.
+- `src/lib/telegram/`: private-chat validation, deterministic parser, scoped
+  connection-based DAL, atomic approvals, update leases and bounded transport.
 - `src/generated/prisma/`: generated, ignored; regenerate instead of editing.
 - `prisma/migrations/`: reviewed, append-only SQL. Preserve raw CHECK constraints
   and the pending-action partial index when drafting future migrations.
@@ -79,9 +83,12 @@ is required for lint, tests, typecheck, generate, or build.
 
 ## Data, money and date rules
 
-- Every user-owned data-access function requires `userId`. Every server action,
-  handler and data-access entry verifies the real session itself; a layout or
-  proxy check alone is insufficient. No finance routes exist before auth.
+- Every user-owned data-access function requires `userId`. Every browser action,
+  page, handler and DAL entry verifies the real session itself; a layout or proxy
+  check alone is insufficient. Telegram webhooks verify their secret before
+  parsing, derive identity from the private-chat sender, and every scoped bot DAL
+  entry rechecks the live connection under a user row lock. Never fabricate a web
+  session for Telegram or weaken the web finance DAL's session checks.
 - Scope all reads, updates and deletes by the authenticated user's ID. Never
   trust a user ID from a browser, Telegram payload, or model output.
 - The reviewed User INSERT trigger seeds defaults in the signup transaction.
@@ -94,6 +101,9 @@ is required for lint, tests, typecheck, generate, or build.
   [first day, first day of next month). Audit timestamps use UTC TIMESTAMPTZ.
 - Telegram proposals require atomic, explicit approval. AI is untrusted input;
   it never authorizes writes or supplies user IDs, SQL, or financial totals.
+- Retry the same Telegram message with its stable pending-action UUID. Retain
+  action tombstones for the update dedupe window. DONE replays return 200; active
+  leases return retryable 503 so a killed invocation cannot lose its retry.
 
 ## Do not
 

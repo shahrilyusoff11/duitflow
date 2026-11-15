@@ -311,6 +311,14 @@ At the end of each phase run lint, typecheck, tests and build, and report **actu
 
 **Done when:** a linked user can query records and add a confirmed expense via the deterministic parser with no duplicate writes.
 
+**Local implementation evidence (15 November 2026):** Phase 3 implemented;
+227 unit/integration tests and 18 browser tests pass. See docs/STATUS.md.
+The immediate processing-message alternative keeps deterministic processing
+HTTP-retryable; after() handles cleanup only. Active leases return 503 without
+duplicate work so a killed worker does not lose its retry (docs/DECISIONS.md).
+Live bot credentials, public HTTPS webhook registration and real delivery are
+not claimed. Stop before Phase 4.
+
 ### Phase 4 — Free-tier AI parsing
 1. Gemini behind `AI_PROVIDER` abstraction; verify current free-tier model and quota first and report the choice.
 2. Per-user AI opt-in setting and notice; minimal prompt payload (§4.8).
@@ -338,16 +346,18 @@ Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram 
 - [x] Transaction CRUD works; amounts are precise; money strings are parsed per §4.4.
 - [x] Dashboard shows correct monthly income/expense/net using KL dates, including month-boundary cases.
 - [x] Budgets behave consistently; planned commitments (if built) are never double-counted.
-- [ ] Telegram links/unlinks securely; unlink invalidates pending actions.
-- [ ] Webhook rejects bad secrets (`401`), ignores non-private chats, and returns `200` for authentic unsupported updates.
-- [ ] A retry after a failed/timed-out update is processed, not dropped; a replay after success is ignored.
-- [ ] Linked user can submit one or multiple transactions in natural language; bot asks for clarification when details are missing and resolves the user's follow-up reply.
-- [ ] Bot always asks for confirmation before saving; repeated button presses create no duplicates.
+- [x] Telegram links/unlinks securely; unlink invalidates pending actions (local automated evidence; live setup pending).
+- [x] Webhook rejects bad secrets (`401`), ignores non-private chats, and returns `200` for authentic unsupported updates.
+- [x] A retry after a failed/timed-out update is processed, not dropped; a replay after success is ignored.
+- [x] Linked user can submit one or multiple transactions through the documented deterministic grammar; missing amount/category clarification resolves follow-up replies (broader AI language remains Phase 4).
+- [x] Bot always asks for confirmation before saving; repeated button presses create no duplicates.
+- [x] Phase 3 financial commands read only scoped stored records; app works without any AI key.
 - [ ] Financial answers come only from stored DB records via enumerated operations.
 - [ ] Invalid, ambiguous or malicious AI output fails safely.
 - [ ] App works without an AI key via the deterministic parser; AI parsing is opt-in per user.
 - [ ] AI and login rate limits work without Redis.
 - [ ] Unit, authorization/integration and critical E2E tests pass; golden-set report included.
+- [x] Phase 3 unit/integration and critical browser tests pass; AI golden-set report remains Phase 4.
 - [ ] No secrets in Git; all secrets server-side.
 - [ ] Deploys on free tiers only for small personal non-commercial use.
 - [ ] README covers setup, env vars, architecture, testing, deployment, token rotation, privacy/PDPA note and known free-tier limitations.

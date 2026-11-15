@@ -6,19 +6,22 @@ A personal finance MVP for Malaysia, built incrementally from
 [the specification](DUITFLOW_CODEX_SPEC.md). UI language is Bahasa Melayu,
 currency is MYR, and financial dates use Asia/Kuala_Lumpur.
 
-**Status: Phase 2 finance MVP implemented.** Categories, transaction CRUD,
-server-side monthly aggregates and budgets are available through the protected web app.
-Authentication and Neon configuration are preserved. Phase 3 has not started.
+**Status: Phase 3 Telegram integration implemented locally.** Protected Settings,
+secure linking, private-chat commands, deterministic intake, clarification and
+atomic confirmation are available. Authentication, Neon and web finance are
+preserved. Phase 4 AI parsing has not started.
 [Phase 1 GitHub CI](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318)
-passed; Phase 2 local verification is recorded in [STATUS.md](docs/STATUS.md).
+passed; Phase 2 and Phase 3 local verification is recorded in [STATUS.md](docs/STATUS.md).
 The app retains Better Auth GitHub-only OAuth, database sessions,
 atomic per-user category seeding, scoped data access, migrations and CI.
-Telegram and AI remain later phases. The existing Neon Free production branch is connected and all three
+Live Telegram setup/verification and hosting remain owner steps; AI is deferred.
+The existing Neon Free production branch is connected and all three
 migrations are applied. [Neon setup, complete change record and proof](docs/NEON_SETUP.md).
 
 See [current evidence and acceptance checklist](docs/STATUS.md),
 [approved auth approach](docs/AUTH_PROPOSAL.md),
-[step-by-step setup](docs/SETUP.md), and
+[step-by-step setup](docs/SETUP.md),
+[Telegram setup and limits](docs/TELEGRAM_SETUP.md), and
 [technical decisions](docs/DECISIONS.md).
 
 ## Run locally without provider credentials
@@ -46,7 +49,8 @@ Playwright starts the production build on 127.0.0.1:3100 with a disposable,
 test-only PostgreSQL-compatible socket server and signed persisted session
 fixtures. It runs Prisma Migrate and checks desktop/mobile OAuth initiation,
 protected access, profile scoping, sign-out, cookie replay, landing navigation,
-and category/transaction/budget CRUD with dashboard updates and warnings.
+category/transaction/budget CRUD with dashboard updates and warnings, and
+Telegram Settings link generation/unlink confirmation.
 The external GitHub screen is intercepted, never called live. Integration tests
 also verify the callback with mocked GitHub HTTP responses. This is separate
 from the required real provider verification.
@@ -145,6 +149,7 @@ src/lib/auth/               Better Auth, session guards, scoped profile DAL
 src/lib/config/             Validated, redacted database configuration
 src/lib/db/                 Lazy server-only Prisma/pg connection
 src/lib/finance/             Scoped DAL, money/date validation, defaults, aggregates
+src/lib/telegram/            Webhook leases, deterministic parser, Telegram-scoped DAL
 prisma/schema.prisma        Domain + required OAuth identity/session/state models
 prisma/migrations/          Domain, integrity, auth and category signup trigger
 scripts/                    Safe env initialization and configuration format check
@@ -157,14 +162,14 @@ docs/                       Decisions, proposal, current status
 
 ## Architecture
 
-The following is the planned Core architecture. Authentication and web finance
-are implemented; Telegram, its webhook and parsing remain later phases.
+Authentication, web finance and deterministic Telegram intake are implemented.
+Gemini and AI opt-in remain Phase 4.
 
 ```mermaid
 flowchart TD
   Browser["Browser · Next.js UI"] --> Server["Authenticated server actions / scoped DAL"]
   Telegram["Telegram private chat"] --> Webhook["Validated webhook + update state machine"]
-  Webhook --> Parser["Deterministic parser / optional consented Gemini"]
+  Webhook --> Parser["Deterministic parser"]
   Parser --> Pending["Clarification or explicit confirmation"]
   Pending --> Server
   Server --> Prisma["Prisma · decimal money · local DATE"]
@@ -172,7 +177,9 @@ flowchart TD
 ```
 
 All user-owned DAL operations must require the authenticated `userId`.
-Each server page, action, handler and DAL entry checks the real session.
+Every browser page, action, handler and DAL entry checks the real session.
+The Telegram handler verifies the webhook secret and private sender; each bot
+DAL entry independently rechecks the live connection and required userId.
 Proxy/layout checks alone are insufficient. Monetary values stay as
 DECIMAL(12,2), with decimal arithmetic on the server and string serialization.
 `occurredOn` is a Malaysian local calendar DATE. UTC audit timestamps use
@@ -201,6 +208,33 @@ resolved in Asia/Kuala_Lumpur on the server. Monthly ranges use an exclusive
 next-month boundary. No shared finance cache, schema change, new service or
 provider credential is needed for Phase 2. Demo writes are blocked.
 
+## Using Telegram (Phase 3)
+
+Configure the optional server-only Telegram variables using
+[TELEGRAM_SETUP.md](docs/TELEGRAM_SETUP.md), then open **Tetapan** to create a
+single-use ten-minute link. Unlinking invalidates pending proposals and links.
+The finance web app works with no Telegram configuration.
+
+Private-chat commands: `/start`, `/help`, `/link`, `/balance`, `/budget`,
+`/report`, `/cancel`. Financial commands also accept `YYYY-MM`.
+Try `Makan RM12`, `Gaji RM2500`, or `kopi RM8 lepas tu minyak RM40`.
+Missing/ambiguous amounts and categories trigger a clarification; choose the
+exact category name when asked. Confirm with **Sahkan**, or **Batal** and resend
+to change a proposal. A casual `ya` never writes. Unsupported language receives
+format guidance. No AI provider is called.
+
+Secret checks precede bounded JSON validation. Groups/channels are ignored.
+DONE deliveries are deduplicated; failed/stale leases retry; busy leases return
+503 so a timed-out worker's retry is preserved. Stable action IDs also prevent
+message retries from creating a second approvable proposal after a save.
+Phase 3 uses bounded synchronous deterministic processing and immediate chat
+feedback; HTTP failures remain retryable until processing finishes. Next.js
+`after()` only runs bounded cleanup. No raw-update inbox, cron, broker or extra
+service is required. Outbound replies can be repeated or uncertain after a
+network failure; database approvals remain atomic and idempotent.
+
+No live bot, webhook registration or hosting deployment was performed.
+
 ## CI and verification
 
 The workflow has passed on GitHub Actions for the Phase 1 commit.
@@ -218,7 +252,7 @@ No frontend deployment has been created. Local evidence and limitations are in
 - Verify provider terms, quotas and region/privacy implications again during
   deployment. Free tiers are not unlimited and terms change.
 - Configure approved OAuth credentials and exact production callback URL.
-- Later, create a bot with BotFather and configure an HTTPS webhook with a secret
+- When ready, create a bot with BotFather and configure an HTTPS webhook with a secret
   and `allowed_updates: ["message", "callback_query"]`. Do not configure a
   webhook before its secure handler and tests exist.
 - Gemini is optional, default off per user, and must have a currently eligible
@@ -229,9 +263,11 @@ No frontend deployment has been created. Local evidence and limitations are in
 Neon may autosuspend, so initial requests after inactivity can be slower.
 Free-tier recovery/history/export limits must be checked at setup; there is
 currently no backup automation or CSV export. Do not use the app as the sole copy
-of important financial records. Lazy bounded cleanup of expired Telegram actions,
-old updates and rate-limit events belongs to the later bot implementation; no
-cron job or cleanup behavior is claimed today.
+of important financial records. Telegram requests perform bounded lazy cleanup:
+at most 100 old DONE updates, 100 link tokens and 100 expired pending actions per
+successful request. DONE updates and action tombstones retain seven days;
+expired link tokens retain one day. FAILED/PROCESSING updates remain available
+for retry. No cron is needed.
 
 ## Privacy and credential rotation
 

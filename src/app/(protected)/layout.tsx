@@ -12,7 +12,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       <SignOutButton />
     </header>
     <nav className="finance-nav wrap" aria-label="Navigasi kewangan">
-      <Link href="/dashboard">Dashboard</Link><Link href="/transactions">Transaksi</Link><Link href="/budgets">Bajet</Link><Link href="/categories">Kategori</Link>
+      <Link href="/dashboard">Dashboard</Link><Link href="/transactions">Transaksi</Link><Link href="/budgets">Bajet</Link><Link href="/categories">Kategori</Link><Link href="/settings">Tetapan</Link>
     </nav>
     <main id="kandungan" className="account-main wrap">{children}</main>
     <footer className="site-footer wrap"><p>DuitFlow · Ruang kewangan peribadi anda.</p><p>MYR / Malaysia</p></footer>
