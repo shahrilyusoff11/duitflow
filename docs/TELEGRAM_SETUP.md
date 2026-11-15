@@ -6,7 +6,9 @@ The web app continues to work when Telegram configuration is absent.
 
 The implementation and automated tests do not create a Telegram bot, register a
 live webhook, deploy hosting or send messages to a real user. Those remain owner
-setup and live verification steps. Stop before Phase 4.
+setup and live verification steps. Phase 4's optional AI and Phase 5's local
+polish/demo are now implemented; provider/dashboard setup and publishing still
+require approval. Follow [the deployment runbook](DEPLOYMENT.md) before live setup.
 
 ## Owner setup
 

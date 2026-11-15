@@ -1,12 +1,13 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { mutateTelegram } from "@/app/(protected)/settings/actions";
 
 export function TelegramSettingsForm({ linked, configured }: { linked: boolean; configured: boolean }) {
   const [state, action, pending] = useActionState(mutateTelegram, { ok: false, message: "" });
   const [confirming, setConfirming] = useState(false);
-  return <form action={action} className="finance-form">
+  const feedbackId = useId();
+  return <form action={action} className="finance-form" aria-busy={pending} aria-describedby={state.message ? feedbackId : undefined}>
     <input type="hidden" name="operation" value={linked ? "unlink" : "link"} />
     <fieldset disabled={pending}>
       {linked ? confirming ? <>
@@ -17,7 +18,7 @@ export function TelegramSettingsForm({ linked, configured }: { linked: boolean; 
       </> : <button className="danger" type="button" onClick={() => setConfirming(true)}>Putuskan sambungan Telegram</button> :
         <button className="button" type="submit" disabled={!configured}>{pending ? "Menyediakan pautan…" : "Jana pautan Telegram"}</button>}
     </fieldset>
-    {state.message && <p role={state.ok ? "status" : "alert"} className={state.ok ? "form-success" : "form-error"}>{state.message}</p>}
+    {state.message && <p id={feedbackId} role={state.ok ? "status" : "alert"} className={state.ok ? "form-success" : "form-error"}>{state.message}</p>}
     {!linked && state.linkUrl && <div>
       <p><a className="text-link" href={state.linkUrl} target="_blank" rel="noopener noreferrer">Buka bot untuk pautkan Telegram</a></p>
       <p>Tekan Mula / Start di Telegram, kemudian muat semula halaman ini untuk melihat status sambungan.</p>

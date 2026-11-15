@@ -8,7 +8,7 @@ import { BudgetStatus, CategorySelect, type Categories, MonthPicker } from "@/co
 export const metadata = { title: "Bajet — DuitFlow" };
 
 function Fields({ categories, period, value }: { categories: Categories; period: string; value?: { categoryId: string; limitAmount: string; warningAt: number } }) {
-  return <><CategorySelect categories={categories} value={value?.categoryId} expenseOnly /><label>Bulan bajet<input name="period" type="month" defaultValue={period} min="2000-01" max="2100-12" required /></label><label>Had (MYR)<input name="limitAmount" defaultValue={value?.limitAmount} maxLength={80} placeholder="RM500" required /></label><label>Ambang amaran (%)<input name="warningAt" type="number" min={1} max={99} defaultValue={value?.warningAt ?? 80} required /></label></>;
+  return <><CategorySelect categories={categories} value={value?.categoryId} expenseOnly /><label>Bulan bajet<input name="period" type="month" defaultValue={period} min="2000-01" max="2100-12" required /></label><label>Had (MYR)<input name="limitAmount" inputMode="decimal" defaultValue={value?.limitAmount} maxLength={80} placeholder="RM500" required /></label><label>Ambang amaran (%)<input name="warningAt" type="number" min={1} max={99} defaultValue={value?.warningAt ?? 80} required /></label></>;
 }
 
 export default async function BudgetsPage({ searchParams }: { searchParams: SearchParams }) {

@@ -1,10 +1,70 @@
 # Implementation status — 15 November 2026
 
-**Phases 1 and 2 are complete. Phases 3 and 4 are implemented and verified locally.**
-The owner requested Phase 4 only. Stop before Phase 5. Gemini credentials,
-account/dashboard setup and live calls remain pending explicit approval. No paid
-service, new dependency, hosting deployment, schema migration or live Neon write
-was performed. Live Telegram setup/verification also remains an owner step.
+**Phases 1 and 2 are complete. Phases 3–5 are implemented and verified locally.**
+Phase 5's deployment/live acceptance is still open. The owner authorized local
+polish/demo/deployment preparation on 15 November 2026 and requires approval
+before provider/dashboard setup or publishing. That deployment/setup approval
+was received on 15 November 2026; release work is now in progress. Gemini
+credentials and live calls remain unapproved. Stop before Stretch. No paid
+service, new dependency, schema
+migration, hosting deployment or live Neon write was performed in Phase 5.
+
+## Phase 5 polish and deployment preparation — local work complete
+
+- [x] Public `/demo` is a read-only, clearly labeled synthetic November 2026
+  snapshot with exact Decimal totals, sample transactions, category breakdown,
+  budgets, warnings and six-month trend. No user, session, DB access, mutation,
+  Telegram connection or AI call is created. Real protected routes stay gated.
+- [x] Landing/sign-in demo links, active accessible navigation, loading skeleton,
+  contextual empty states, Malay 404 recovery, installed Next.js `retry()` error
+  recovery, accessible busy/error/success feedback, larger targets, mobile money
+  keyboard and long-text/narrow-screen wrapping.
+- [x] Response headers deny framing, suppress referrers, prevent MIME sniffing
+  and disable unused camera/microphone/location permissions. Account/sign-in/API
+  paths request no indexing; robots rules are crawl guidance, never access control.
+  Session checks, DAL scoping and webhook authentication are preserved.
+- [x] Portfolio README with architecture, local setup, privacy/rotation/limits,
+  screenshots and [exact deployment/approval runbook](DEPLOYMENT.md).
+- [x] Synthetic desktop/mobile demo and finance screenshots visually inspected.
+  Saved screenshot artifacts show only the public invented demo data.
+- [x] Auth, Neon configuration, finance, Telegram and optional AI regression
+  suites pass. All three reviewed migrations and signup trigger are unchanged.
+- [x] Owner approves provider/dashboard setup and publishing for Vercel Hobby,
+  production OAuth and Telegram; no dashboard actions have been performed.
+- [ ] Free public HTTPS deployment, registered secret-protected production
+  webhook and actual sign-in → web transaction → link → confirmed Telegram
+  expense verified. No live demo/bot URL is claimed.
+
+Executed on Windows / Node 26.11.1, npm 11.20.0:
+
+| Phase 5 check | Actual result |
+| --- | --- |
+| npm run db:validate | Passed |
+| npm run setup:check | Passed; format only, no values/connectivity claim |
+| npm run lint | Passed, no warnings |
+| npm run typecheck | Passed |
+| npm test | **315 passed** across 15 files, including **45/45 mocked AI golden cases** |
+| npm run build | Passed; `/demo` and robots static, account/API routes dynamic |
+| npx playwright install chromium | Passed |
+| npm run test:e2e | **28 passed**, desktop/mobile Chromium, 6 workers |
+| Final demo CSS/screenshot refinement | Rebuild and scoped ESLint passed; **2/2 demo browser checks** passed again |
+| npm audit --omit=dev | **0 vulnerabilities** |
+| Targeted secret scan | No matches in current non-ignored source or 162 local Git-history blobs; `.env`/generated client ignored |
+| git diff --check | Passed |
+
+The production browser suite now verifies precise public demo values, no forms
+or mutation requests, keyboard navigation, no horizontal overflow, same-browser
+anonymous profile denial and protected redirects. It also verifies response
+headers, Malay 404 recovery and active finance navigation, alongside all previous
+OAuth/session, finance CRUD, budget, Telegram Settings and consent flows.
+Browser migrations use disposable PostgreSQL-compatible storage with every DB
+URL alias and AI credential/provider explicitly overridden. Integration tests
+cover real Prisma/session boundaries with mocked provider transport.
+
+Local checks do not establish hosted cold-start latency, real provider delivery,
+Gemini language accuracy or public availability. Production credentials, provider
+dashboards, live services and publishing were untouched. Phase 5 can close only
+after its separately approved hosted/live checklist passes; Stretch is unstarted.
 
 ## Phase 4 free-tier AI — implemented and verified locally
 
@@ -78,7 +138,8 @@ dashboard action, production consent change, real Telegram delivery, new live
 Neon/OAuth check or new remote CI run is claimed. An unbilled Free project and
 actual quotas must be verified after approval before credentials are configured.
 Free-tier terms prohibit sensitive/personal input: use synthetic portfolio
-examples only. Phase 5 and Stretch remain unstarted.
+examples only. Phase 5 and Stretch were unstarted at that checkpoint; see the
+Phase 5 local-work/deployment gate above.
 
 ## Phase 3 Telegram — implemented and verified locally
 
@@ -359,5 +420,6 @@ locally after this verified run; no application or workflow code changed.
 
 At that checkpoint Phases 2–5 and Stretch were unstarted. Phases 2 and 3 have
 since been implemented and verified locally as recorded above. Phase 4 is now
-implemented with mocked golden-set evidence. Live Gemini setup, Phase 5,
-demo/deployment acceptance and Stretch remain unstarted.
+implemented with mocked golden-set evidence. Phase 5 local polish/demo work is
+now implemented; hosted/live deployment acceptance, live Gemini setup and Stretch
+remain outstanding as recorded above.

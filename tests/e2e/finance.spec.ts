@@ -9,6 +9,7 @@ test("web finance CRUD updates monthly totals and budget warnings", async ({ pag
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/categories");
+  await expect(page.getByRole("navigation", { name: "Navigasi kewangan" }).getByRole("link", { name: "Kategori", exact: true })).toHaveAttribute("aria-current", "page");
   const createCategory = page.locator("form").filter({ has: page.getByRole("button", { name: "Tambah kategori", exact: true }) });
   await createCategory.getByLabel("Nama kategori").fill("Synthetic food");
   await createCategory.getByRole("button", { name: "Tambah kategori", exact: true }).click();
@@ -49,6 +50,7 @@ test("web finance CRUD updates monthly totals and budget warnings", async ({ pag
   await page.goto("/transactions?from=2026-11-01&to=2026-11-30&type=EXPENSE&search=Synthetic");
   await page.getByRole("link", { name: "Synthetic lunch", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Butiran transaksi", exact: true })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Navigasi kewangan" }).getByRole("link", { name: "Transaksi", exact: true })).toHaveAttribute("aria-current", "page");
   await page.getByLabel("Amaun (MYR)").fill("12 ringgit 50 sen");
   await page.getByRole("button", { name: "Simpan transaksi", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Perubahan disimpan.");

@@ -23,14 +23,14 @@ export default function Home() {
       <main id="kandungan">
         <section className="hero wrap" aria-labelledby="hero-title">
           <div className="hero-copy">
-            <span className="eyebrow"><span className="status-dot" /> Akan datang</span>
+            <span className="eyebrow"><span className="status-dot" aria-hidden="true" /> Demo portfolio</span>
             <p className="kicker">DUIT ANDA. CERITA ANDA.</p>
             <h1 id="hero-title">Kewangan harian,<br /><span>lebih teratur.</span></h1>
             <p className="hero-description">Catat belanja melalui chat, pantau bajet melalui dashboard. Ruang ringkas untuk lebih memahami aliran duit anda.</p>
-            <a className="button" href="#cara">Lihat cara ia berfungsi <span aria-hidden="true">↓</span></a>
-            <p className="hero-note">Direka untuk rutin harian di Malaysia.</p>
+            <div className="hero-actions"><Link className="button" href="/demo">Teroka demo <span aria-hidden="true">↗</span></Link><a className="text-link" href="#cara">Lihat cara ia berfungsi <span aria-hidden="true">↓</span></a></div>
+            <p className="hero-note">Demo baca sahaja · Data rekaan · Tanpa log masuk</p>
           </div>
-          <div className="flow-panel" aria-label="Aliran yang dirancang: catat, semak, sahkan">
+          <div className="flow-panel" aria-label="Aliran catatan: catat, semak, sahkan">
             <div className="panel-top"><span className="mini-brand">duitflow</span><span className="panel-label">SATU RUTIN RINGKAS</span></div>
             <div className="flow-item"><span className="flow-icon" aria-hidden="true">↗</span><div><span className="flow-caption">LANGKAH PERTAMA</span><p>Mulakan dengan catatan.</p></div></div>
             <div className="flow-connector" aria-hidden="true" />
@@ -41,7 +41,7 @@ export default function Home() {
           </div>
         </section>
         <section id="cara" className="how-section wrap" aria-labelledby="how-title">
-          <div className="section-heading"><p className="kicker">DIREKA UNTUK MEMUDAHKAN</p><h2 id="how-title">Tabiat kecil. Gambaran lebih jelas.</h2><p>Inilah pengalaman yang sedang kami bina untuk anda.</p></div>
+          <div className="section-heading"><p className="kicker">DIREKA UNTUK MEMUDAHKAN</p><h2 id="how-title">Tabiat kecil. Gambaran lebih jelas.</h2><p>Teroka contoh rekod, ringkasan bulanan dan bajet dalam demo. Log masuk untuk ruang peribadi anda.</p></div>
           <div className="step-grid">{steps.map((step) => <article className="step" key={step.number}><span className="step-number">{step.number}</span><h3>{step.title}</h3><p>{step.text}</p></article>)}</div>
         </section>
       </main>

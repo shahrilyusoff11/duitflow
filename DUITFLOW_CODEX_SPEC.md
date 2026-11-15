@@ -332,7 +332,7 @@ not claimed at that checkpoint. Phase 4 evidence follows.
 315 unit/integration tests, 20 browser tests and 45/45 mocked golden cases pass.
 Gemini 3.5 Flash-Lite public free eligibility was verified; exact project quotas
 and credential setup require approval. No live AI call/model-accuracy claim.
-See docs/AI_SETUP.md and docs/STATUS.md. Stop before Phase 5.
+See docs/AI_SETUP.md and docs/STATUS.md. Gemini setup/live calls remain gated.
 
 ### Phase 5 — Polish and deploy
 1. Responsiveness, accessibility, error/empty states.
@@ -342,6 +342,17 @@ See docs/AI_SETUP.md and docs/STATUS.md. Stop before Phase 5.
 5. Portfolio-ready README with architecture diagram.
 
 **Done when:** the demo link works, the bot works, and README lets another developer run it.
+
+**Local implementation evidence (15 November 2026):** Phase 5 local polish,
+public read-only synthetic `/demo`, screenshots and deployment runbook are
+implemented. Lint, typecheck, 315 unit/integration tests (including 45/45 mocked
+AI golden cases), production build and 28 desktop/mobile browser tests pass.
+No account session or real user data is exposed by the public snapshot.
+Provider/dashboard setup and publishing require approval; the public HTTPS URL,
+production webhook and real hosted OAuth/Telegram smoke checks remain pending.
+Gemini credential setup/live calls remain separately unapproved. Overall Phase 5
+deployment acceptance is open. See docs/DEPLOYMENT.md and docs/STATUS.md.
+Stop before Stretch.
 
 ### Stretch (after Phase 5, each optional)
 Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram proposal editing, expanded Playwright suite.
@@ -364,9 +375,11 @@ Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram 
 - [x] AI and login rate limits work without Redis (Postgres tests).
 - [x] Unit, authorization/integration and critical E2E tests pass; golden-set report included.
 - [x] Phase 3 unit/integration and critical browser tests pass; Phase 4 golden-set report is in docs/AI_GOLDEN_REPORT.md.
-- [ ] No secrets in Git; all secrets server-side.
+- [x] Targeted current-source/local-Git-history secret scan has no matches; `.env` is ignored and application secrets stay server-side (not a security certification).
 - [ ] Deploys on free tiers only for small personal non-commercial use.
-- [ ] README covers setup, env vars, architecture, testing, deployment, token rotation, privacy/PDPA note and known free-tier limitations.
+- [x] README covers setup, env vars, architecture, testing, gated deployment, token rotation, privacy/PDPA note and known free-tier limitations.
+- [x] Public read-only synthetic demo, responsive/accessibility polish and screenshots verified locally.
+- [ ] Phase 5 public demo URL, production webhook and live sign-in/web/Telegram confirmation acceptance verified after approval.
 
 ## 13. Environment variables
 

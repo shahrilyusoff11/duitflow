@@ -16,7 +16,7 @@ export function TransactionFields({ categories, value }: { categories: Categorie
   return <>
     <label>Jenis<select name="type" defaultValue={value?.type ?? "EXPENSE"}><option value="EXPENSE">Perbelanjaan</option><option value="INCOME">Pendapatan</option></select></label>
     <CategorySelect categories={categories} value={value?.categoryId} />
-    <label>Amaun (MYR)<input name="amount" type="text" defaultValue={value?.amount} placeholder="RM12.50" maxLength={80} required /></label>
+    <label>Amaun (MYR)<input name="amount" type="text" inputMode="decimal" defaultValue={value?.amount} placeholder="RM12.50" maxLength={80} title="Amaun positif, maksimum dua tempat perpuluhan. Contoh: RM12.50 atau 12 ringgit 50 sen." required /></label>
     <label>Keterangan<input name="description" defaultValue={value?.description} maxLength={500} required /></label>
     <label>Tarikh<input name="occurredOn" type="date" defaultValue={value?.occurredOn ?? todayInMalaysia()} min="2000-01-01" max="2100-12-31" required /></label>
   </>;
@@ -27,7 +27,7 @@ export function MonthPicker({ period }: { period: string }) {
 }
 
 export function TransactionsList({ rows }: { rows: Awaited<ReturnType<typeof listTransactions>>["rows"] }) {
-  if (!rows.length) return <p className="empty-state">Tiada transaksi untuk pilihan ini. Tambah rekod pertama anda.</p>;
+  if (!rows.length) return <p className="empty-state">Tiada transaksi untuk pilihan ini. Tambah rekod pertama anda atau ubah penapis untuk melihat rekod lain.</p>;
   return <ul className="record-list">{rows.map((row) => <li key={row.id}>
     <div><Link className="text-link" href={`/transactions/${row.id}`}>{row.description}</Link><small>{row.categoryName} · {displayDate(row.occurredOn)}</small></div>
     <div className="record-amount"><strong>{formatMyr(row.amount)}</strong><small>{row.type === "INCOME" ? "Pendapatan" : "Perbelanjaan"}</small></div>

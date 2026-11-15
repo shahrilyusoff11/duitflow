@@ -325,3 +325,55 @@ and fail-safe behavior, not real Gemini language accuracy. Provider HTTP is
 mocked, database integration uses disposable PostgreSQL-compatible storage and
 real sessions, browsers run production Next.js with all DB/AI env overridden.
 No live key, provider call, production write, hosting or new remote CI run.
+
+## 2026-11-15 — Phase 5 local polish and gated deployment
+
+The owner requested Phase 5 only, preserving auth, Neon, finance, Telegram and
+AI, with explicit approval before provider/dashboard setup or publishing. Local
+implementation and documentation are authorized. Gemini setup/live calls remain
+unapproved, no paid service is allowed, and Stretch remains outside scope.
+
+Use an immutable public `/demo` snapshot with invented records, exact Decimal
+aggregates and visibly labeled sample periods. This gives visitors a read-only
+portfolio without a shared account, credentials, fake session or real user data.
+It imports no database/session/provider modules and exposes no mutation, linking
+or consent controls. Existing demo-user mutation restrictions remain. No live DB
+seed or schema change is needed. Only this public synthetic page may be static;
+authenticated finance results remain uncached and independently session-scoped.
+
+Polish includes keyboard/active navigation, labeled feedback, touch targets,
+wrapping, loading/empty/error/404 states and the installed Next.js recovery API.
+The current error-boundary guide documents `retry()` for refetching failed
+segments. Next's installed deployment, headers, robots and accessibility guides
+were also consulted. Conservative response headers add framing/referrer/MIME and
+unused-permission protection. Crawl/noindex controls do not authorize access.
+
+Keep deployment separate from the application build: `npm run build` does not
+migrate or seed a database. The runbook orders owner approval, stable free HTTPS
+origin, production-scoped configuration/OAuth, migration status, deployment and live
+synthetic verification. Existing Neon config and local OAuth credentials are
+preserved. Reusing the auth database requires preserving its encryption secret;
+do not silently rotate it and strand encrypted provider tokens. Start hosted AI
+in deterministic mode with no Gemini key/attestation;
+consent cannot approve provider setup. Previews must not inherit production
+database or bot credentials. No hosting/project/webhook/publish action was taken.
+
+Record passing local regressions and synthetic screenshots in STATUS.md and
+README. The overall Phase 5 done condition still requires an approved public
+deployment, secure live webhook and real sign-in/web/Telegram confirmation flow.
+No public URL, real bot result, new live Neon/OAuth result or remote CI run is
+claimed from local checks. See DEPLOYMENT.md for exact gated owner steps.
+
+## 2026-11-15 — Deployment approval received
+
+The owner explicitly approved completing Vercel deployment/setup and publication
+in chat. This authorizes the previously proposed free-only hosting, production
+OAuth/Telegram setup and synthetic live verification with the existing Neon
+database. Gemini setup/live calls and paid services remain excluded. Connector
+access/login actions may still require the owner's own authentication; do not
+confuse that technical requirement with a new request for deployment approval.
+
+Add explicit `.vercelignore` exclusions for all environment files, local Neon
+configuration, interrupted dependencies, generated clients, build output and
+test/browser artifacts before any CLI source upload. Git ignore rules alone do
+not define CLI upload contents. No production DB migration or demo seed is added.

@@ -2,7 +2,8 @@
 
 Implementation is available locally. **Credential setup and live API calls are
 not approved or performed.** No key is required for the web app, Telegram
-commands, deterministic intake, tests or build. Stop before Phase 5.
+commands, deterministic intake, tests or build. Phase 5 local polish and deployment
+preparation are authorized; Gemini setup and live calls remain unapproved.
 
 ## Public eligibility checked on 15 November 2026
 
@@ -51,7 +52,8 @@ shows **Free** with no linked billing, inspect
 [active quotas](https://aistudio.google.com/rate-limit), and create/restrict a
 server-only key for the Gemini API. Never paste the key into chat, screenshots,
 tracked files or a NEXT_PUBLIC variable. Save it only in ignored .env or a
-separately approved hosting secret store. Hosting setup belongs to Phase 5.
+separately approved hosting secret store. See [Phase 5 deployment preparation](DEPLOYMENT.md);
+hosting setup and publishing require separate approval, and do not authorize AI.
 
 Only once those conditions are confirmed, the proposed ignored local config is:
 

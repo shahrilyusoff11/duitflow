@@ -21,6 +21,7 @@ export default async function SignInPage({ searchParams }: { searchParams: Promi
       {!available && <p className="notice" role="status">Log masuk belum tersedia. Sila cuba lagi sebentar.</p>}
       <SignInButton available={available} />
       <p className="auth-note">DuitFlow tidak meminta kata laluan GitHub anda. Pengesahan dilakukan melalui GitHub.</p>
+      <p><Link className="text-link" href="/demo">Teroka demo baca sahaja tanpa log masuk</Link></p>
       <Link className="text-link" href="/">← Kembali ke halaman utama</Link>
     </section>
     <p className="auth-note">Direka untuk rutin harian di Malaysia.</p>

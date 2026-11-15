@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useId, useState } from "react";
 import { mutateFinance } from "@/app/(protected)/actions";
 
 export function MutationForm({ operation, id, label = "Simpan", destructive = false, children }: {
@@ -8,16 +8,17 @@ export function MutationForm({ operation, id, label = "Simpan", destructive = fa
 }) {
   const [state, action, pending] = useActionState(mutateFinance, { message: "", ok: false });
   const [confirmed, setConfirmed] = useState(false);
-  return <form action={action} className="finance-form">
+  const feedbackId = useId();
+  return <form action={action} className="finance-form" aria-busy={pending} aria-describedby={state.message ? feedbackId : undefined}>
     <input type="hidden" name="operation" value={operation} />
     {id && <input type="hidden" name="id" value={id} />}
     <fieldset disabled={pending}>
       {children}
       {destructive && !confirmed ? <button type="button" className="danger" onClick={() => setConfirmed(true)}>{label}</button> : <>
         {destructive && <p>Padam rekod ini secara kekal? <button type="button" onClick={() => setConfirmed(false)}>Batal</button></p>}
-        <button className={destructive ? "danger" : "button"} type="submit">{pending ? "Menyimpan…" : destructive ? "Sahkan padam" : label}</button>
+        <button className={destructive ? "danger" : "button"} type="submit">{pending ? destructive ? "Memadam…" : "Menyimpan…" : destructive ? "Sahkan padam" : label}</button>
       </>}
     </fieldset>
-    {state.message && <p role={state.ok ? "status" : "alert"} className={state.ok ? "form-success" : "form-error"}>{state.message}</p>}
+    {state.message && <p id={feedbackId} role={state.ok ? "status" : "alert"} className={state.ok ? "form-success" : "form-error"}>{state.message}</p>}
   </form>;
 }

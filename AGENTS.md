@@ -20,7 +20,12 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
   are recorded in docs/STATUS.md. The owner requested Phase 3 Telegram on
   15 November 2026; its local implementation/evidence is in docs/STATUS.md.
   The owner requested Phase 4 free-tier AI implementation on 15 November 2026.
-  Its implementation/evidence is in docs/STATUS.md. Stop before Phase 5.
+  Its implementation/evidence is in docs/STATUS.md. The owner requested Phase 5
+  polish/demo/deployment preparation on 15 November 2026. Complete local work,
+  The owner approved Vercel deployment, provider setup and publishing in chat on
+  15 November 2026. Complete the approved free-only deployment without asking
+  for that approval again. Gemini setup/live calls remain excluded.
+  Stop before Stretch features. See docs/DEPLOYMENT.md for the release workflow.
   Gemini credential/account/dashboard setup and live calls still require explicit
   approval; see docs/AI_SETUP.md. No paid service is authorized.
   The owner approved Better Auth + GitHub-only OAuth +
@@ -125,6 +130,8 @@ is required for lint, tests, typecheck, generate, or build.
 - Keep Gemini to the reviewed free-eligible model; no paid fallback/automatic
   model change. Five-second AI deadline; Postgres caps reserve before dispatch.
 - No Stretch features or empty placeholder navigation before Core passes.
+- The public /demo is an immutable synthetic snapshot, separate from user data.
+  Never turn it into a session bypass, add write controls, or enable Telegram/AI.
 - No cross-user caching of authenticated results. Shared finance caches are off.
 
 Run lint, typecheck, unit/integration tests and build at each phase boundary;
