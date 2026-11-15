@@ -26,6 +26,9 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
   15 November 2026. Complete the approved free-only deployment without asking
   for that approval again. Gemini setup/live calls remain excluded.
   Stop before Stretch features. See docs/DEPLOYMENT.md for the release workflow.
+  The checkout is linked to Vercel Hobby `sy-74fc/duitflow`; the public origin is
+  https://duitflow-lyart.vercel.app. See docs/VERCEL_SETUP.md and docs/STATUS.md for
+  exact release evidence. Preserve Production-only secret scopes and `.vercelignore`.
   Gemini credential/account/dashboard setup and live calls still require explicit
   approval; see docs/AI_SETUP.md. No paid service is authorized.
   The owner approved Better Auth + GitHub-only OAuth +

@@ -1,12 +1,42 @@
-# Phase 5 deployment runbook — authorized
+# Phase 5 deployment runbook — web release live
 
-Prepared on 15 November 2026. This is a reviewable plan, not an executed
-deployment. Phase 5 local work created no Vercel project, production OAuth app,
-bot, webhook, Gemini credential or live provider request. Existing Neon Free
-and local GitHub OAuth remain intact. See [actual evidence](STATUS.md).
+Updated on 15 November 2026. The approved Vercel Hobby web release is live at
+[DuitFlow](https://duitflow-lyart.vercel.app), including
+[the read-only synthetic demo](https://duitflow-lyart.vercel.app/demo).
+Hosted readiness and anonymous denial pass. Real production OAuth login and
+Telegram delivery remain pending owner action. Existing Neon/local auth are
+preserved, and Gemini remains disabled. See [the setup record](VERCEL_SETUP.md)
+and [full verification evidence](STATUS.md).
+
+## Current release evidence
+
+| Item | Actual result |
+| --- | --- |
+| Vercel scope / project | Hobby `SY` / `sy-74fc`; `duitflow` / `prj_3N2G8nhG2CQIMOaMGFSPxwLhStRQ` |
+| Source / deployment | `ade424e3575464738a3e926a748ef5be81a74981`; `dpl_r7u4LcdzNNBGdrcrjbbPHQCxggEA`, **READY** |
+| Build / runtime | Basic 2 vCPU / 8 GB, **1m 53s**; Node **26.x**, function region `cle1` |
+| Canonical public origin | [duitflow-lyart.vercel.app](https://duitflow-lyart.vercel.app) |
+| Protected generated URL | `https://duitflow-5v7l9rcfp-sy-74fc.vercel.app` |
+| Release CI | [43701079034](https://github.com/shahrilyusoff11/duitflow/actions/runs/43701079034), all required steps pass; **316 tests / 28 browser tests** |
+| Release method | Reviewed manual CLI staging/promotion; no Git auto-deploy integration |
+
+CLI-authorized staged checks passed before promotion: `/`, `/demo`, `/sign-in`
+200; `/api/profile` 401; `/dashboard` 307; health 200. Raw unauthenticated
+canonical checks then passed with the same expected statuses, health `no-store`
+and configured security headers. `verify:app` against the canonical origin
+passed a real headless browser → health → Prisma → Neon check, anonymous
+redirect/profile denial and zero client errors. These checks do not prove
+real OAuth login, finance writes or bot delivery.
+
+Generated/preview deployment protection stays enabled. CLI access automatically
+created a platform protection-bypass secret; its value was never printed or
+committed. Do not weaken application sessions or publish that secret. A
+five-minute runtime-log review saw one `pg` future SSL-mode deprecation warning
+on a healthy readiness request and no observed request failures; no zero-log or
+latency claim is made. No schema changes, live Gemini or paid services occurred.
 
 The owner approved the following deployment/setup scope in chat on
-15 November 2026. Record the reviewed release commit and actual results:
+15 November 2026:
 
 - Vercel Hobby setup and publication to the assigned free `*.vercel.app` origin.
 - Production GitHub OAuth configuration, preserving local OAuth.
@@ -40,34 +70,30 @@ domain. Stop before Stretch. These gates come from the owner's request,
 3. Inspect `/demo` on desktop/mobile. It contains synthetic data, no session,
    database reads, writes, AI or linking. Anonymous finance/Settings pages must
    still require real GitHub login.
-4. Approve the target project, exact commit and public origin before setup or
-   publishing. Record the previous deployment/commit if one exists. There is no
-   existing Vercel release to roll back on first launch.
+4. For a later release, verify the authorized target, reviewed commit and
+   canonical origin. Record the current deployment above as the rollback target.
+   Existing deployment/setup approval is recorded; do not recreate its project.
 
 Browser fixtures always use disposable storage. Never point their migrations at
 production or replace their explicit DB/AI overrides with provider credentials.
 
 ## 2. Owner: choose free hosting and the canonical origin
 
-After approval, open [Vercel New Project](https://vercel.com/new), select the
-personal **Hobby** scope and import `shahrilyusoff11/duitflow`. Review the
-approved branch/commit. Choose Next.js, repository root, install `npm ci`, build
-`npm run build`, and default Next.js output. Add no Marketplace resource, card,
-Pro trial, paid domain or add-on. Hobby is for personal non-commercial use with
-finite included usage; at a limit, reduce/pause use instead of upgrading.
-Recheck [Hobby terms and limits](https://vercel.com/docs/plans/hobby).
+Reuse the existing project above in the confirmed **Hobby** scope. The release
+uses Next.js, repository root, `npm ci`, `npm run build` and default Next.js
+output. It was deployed by reviewed CLI staging and promotion; no Git integration
+was configured. Add no Marketplace resource, card, Pro trial, paid domain or
+add-on. Hobby is for personal non-commercial use with finite included usage;
+at a limit, reduce/pause use instead of upgrading. Recheck
+[Hobby terms and limits](https://vercel.com/docs/plans/hobby).
 
-Use the actual assigned stable `https://<project>.vercel.app` production origin,
-with no path/trailing slash; availability of a particular name is not assumed.
-Both app URL variables must match. If the final origin is assigned only after
-the first deployment, initially publish only the credential-free landing/demo,
-then configure exact URLs and approved secrets and redeploy before testing auth
-or registering the webhook.
+The canonical origin is exactly `https://duitflow-lyart.vercel.app`, without a
+trailing slash. Both app URL variables use this origin. Do not substitute a
+protected generated deployment URL for OAuth or Telegram callbacks.
 
-Under **Settings → Build and Deployment → Node.js Version**, select Node 24
-LTS. Verify the resulting build/runtime: the repo also permits Node 26, and
-Vercel's package engine resolution can override dashboard selection. Both are
-repo-supported; do not claim Node 24 without checking the result. See
+The observed release runtime is **Node 26.x**, permitted by this repository.
+CI uses Node 24 LTS. Vercel's package engine resolution can override dashboard
+selection, so verify actual build/runtime results on later releases. See
 [Node version precedence](https://vercel.com/docs/functions/runtimes/node-js/node-js-versions).
 
 Keep Node.js and the existing 30-second webhook limit. Confirm Fluid Compute is
@@ -87,8 +113,8 @@ each value. Env changes require a new deployment.
 | --- | --- | --- |
 | `DATABASE_URL` | Existing pooled Neon URL with TLS | Omit; isolated DB needs separate approval |
 | `BETTER_AUTH_SECRET` | Existing strong secret when sharing the existing auth DB; preserve encrypted provider-token compatibility | Omit |
-| `BETTER_AUTH_URL` | Exact canonical HTTPS origin, no trailing slash | Omit unless separate preview auth approved |
-| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Approved production OAuth app below | Omit |
+| `BETTER_AUTH_URL` | `https://duitflow-lyart.vercel.app` | Omit unless separate preview auth approved |
+| `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Existing approved GitHub OAuth credentials, scoped to Production | Omit |
 | `NEXT_PUBLIC_APP_URL` | Same canonical origin | Preview's own origin if needed |
 | `APP_TIMEZONE` | `Asia/Kuala_Lumpur` | Same |
 | `APP_CURRENCY` | `MYR` | Same |
@@ -122,20 +148,24 @@ all plans and excludes production domains; confirm its active scope in
 
 ## 4. Owner: configure production GitHub OAuth
 
-After approval, open **GitHub → Settings → Developer settings → OAuth Apps →
-New OAuth App**. A separate production app preserves local OAuth and its secret.
+The existing GitHub credentials are already scoped to Vercel Production. The
+owner was asked to open **GitHub → Settings → Developer settings → OAuth Apps →
+the existing DuitFlow app** and add the canonical callback while retaining the
+working localhost callback. The owner confirmed that callback is added. Real
+production login is still pending; no new OAuth app or client secret is required.
 
 | Field | Value |
 | --- | --- |
-| Application name | `DuitFlow portfolio` or another public name |
-| Homepage URL | Exact canonical HTTPS origin |
-| Authorization callback URL | `https://<project>.vercel.app/api/auth/callback/github` |
+| Additional authorization callback URL | `https://duitflow-lyart.vercel.app/api/auth/callback/github` |
+| Existing local callback | Retain the currently working localhost callback |
 
-Create a client secret and save it directly in Production, with the matching
-client ID. Leave working local credentials unchanged. Do not add wildcard
-preview origins, broaden trusted origins or enable password login. GitHub now
-supports multiple registered callback URLs; this plan uses a separate app for
-isolation. See [current OAuth registration steps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
+Leave the working local credentials unchanged. Do not add wildcard preview
+origins, broaden trusted origins or enable password login. GitHub supports
+multiple registered callback URLs; see
+[current OAuth registration steps](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/creating-an-oauth-app).
+Complete real sign-in/out/re-login in the owner's browser, then the synthetic
+web-finance check. Computer-use safety stopped Windows browser URL verification,
+so the agent did not operate the owner's UI or impersonate a session.
 
 ## 5. Review migrations separately, then publish
 
@@ -155,10 +185,9 @@ and signup trigger. Never create migrations/reset production. Do not put
 `db:deploy` in every hosting build/preview; migrations are a separate release
 step.
 
-For initial approved publication, deploy the reviewed commit with correct env,
-then record canonical URL, commit, deployment ID and result. Git integration
-can publish future pushes automatically: agree the release policy with the owner
-before enabling it; pushing an unapproved commit may publish it immediately.
+The initial approved CLI publication is recorded above. There is no Git
+auto-deploy integration. If one is proposed later, agree its release policy with
+the owner first: future pushes can publish automatically once it is enabled.
 
 Later authorized CLI releases can stage production with `vercel deploy --prod
 --skip-domain`, check it, then assign with `vercel promote <deployment-url>`.
@@ -169,10 +198,12 @@ URLs do not replace app session checks.
 
 ## 6. Owner: create and register Telegram
 
-After bot approval, use official [BotFather](https://t.me/BotFather) and `/newbot`.
-Save token/username directly in approved storage. Generate the webhook secret,
-configure all three bot variables and redeploy reviewed code. Never place the
-token in a browser URL.
+Bot setup is authorized, but token/username are absent. The owner was asked to
+use official [BotFather](https://t.me/BotFather), save the token and username in
+ignored `.env`, or explicitly skip the bot; the response is pending. Never send
+the token through chat or a browser URL. Once supplied, generate the webhook
+secret, configure all three server variables in approved Production storage and
+redeploy reviewed code. No live webhook is registered or bot delivery claimed.
 
 Before registration, POST to the deployed webhook without a secret: expect
 401. A missing server configuration gives 503 and must be fixed first. A correct
@@ -185,7 +216,7 @@ Use the exact secret-safe PowerShell/Node `setWebhook` example in
 
 ```json
 {
-  "url": "https://<project>.vercel.app/api/telegram/webhook",
+  "url": "https://duitflow-lyart.vercel.app/api/telegram/webhook",
   "secret_token": "<read from environment; never tracked>",
   "allowed_updates": ["message", "callback_query"],
   "max_connections": 1
@@ -203,6 +234,10 @@ traces. See [Telegram's registration/status API](https://core.telegram.org/bots/
 Use the owner's real browser session and private bot chat with synthetic data.
 Complete real OAuth normally; no impersonation, fake cookie or demo write
 access. Keep Gemini disabled throughout.
+
+The public landing/demo/readiness and anonymous denial checks already passed
+as recorded above. Production OAuth, authenticated web writes and Telegram
+checks below remain pending and must not be inferred from readiness or CI.
 
 | Check | Expected evidence |
 | --- | --- |

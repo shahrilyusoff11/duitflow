@@ -4,13 +4,14 @@
 Phase 5's deployment/live acceptance is still open. The owner authorized local
 polish/demo/deployment preparation on 15 November 2026 and requires approval
 before provider/dashboard setup or publishing. That deployment/setup approval
-was received on 15 November 2026; release work is now in progress. Gemini
+was received on 15 November 2026; the approved Vercel Hobby release is now live.
+Production OAuth and bot acceptance still need owner action. Gemini
 credentials and live calls remain unapproved. Stop before Stretch. No paid
 service, new dependency, schema migration or live Neon write was performed in
-Phase 5. The approved Vercel Hobby project has been created and is being
-configured; no successful hosted release or live bot result is claimed yet.
+Phase 5. The public demo and hosted browser-to-Neon readiness are verified;
+no real production OAuth login or live bot result is claimed yet.
 
-## Phase 5 polish and deployment preparation — local work complete
+## Phase 5 polish and deployment — live web release, final flows pending
 
 - [x] Public `/demo` is a read-only, clearly labeled synthetic November 2026
   snapshot with exact Decimal totals, sample transactions, category breakdown,
@@ -31,12 +32,13 @@ configured; no successful hosted release or live bot result is claimed yet.
 - [x] Auth, Neon configuration, finance, Telegram and optional AI regression
   suites pass. All three reviewed migrations and signup trigger are unchanged.
 - [x] Owner approves provider/dashboard setup and publishing for Vercel Hobby,
-  production OAuth and Telegram. The Hobby project `duitflow` exists in
-  `SY` / `sy-74fc`; configuration is in progress. Its intended canonical origin
-  is `https://duitflow-lyart.vercel.app`, not yet verified as a live release.
-- [ ] Free public HTTPS deployment, registered secret-protected production
-  webhook and actual sign-in → web transaction → link → confirmed Telegram
-  expense verified. No live demo/bot URL is claimed.
+  production OAuth and Telegram. The Hobby project `duitflow` in
+  `SY` / `sy-74fc` is deployed to [the canonical origin](https://duitflow-lyart.vercel.app).
+- [x] Public HTTPS landing/demo, anonymous access denial and hosted headless
+  browser → health → Prisma → existing Neon readiness verified.
+- [ ] Real production GitHub sign-in/out and synthetic web transaction verified.
+- [ ] Bot credentials, secret-protected production webhook and actual link →
+  confirmed Telegram expense verified. No working live bot is claimed.
 
 Executed on Windows / Node 26.11.1, npm 11.20.0:
 
@@ -79,13 +81,74 @@ followed by a real owner-session read and cross-user denial, then verifies that
 session revocation still denies access. The timing-dependent CI failure was not
 reproduced deterministically on Windows. After the repair, targeted auth/finance
 tests passed **22/22**; lint, typecheck, the full **316-test** suite, production
-build and all **28** desktop/mobile browser tests passed locally. The repair
-has not yet been verified by a subsequent remote CI run.
+build and all **28** desktop/mobile browser tests passed locally.
+
+The repair was committed as `ade424e3575464738a3e926a748ef5be81a74981`.
+[CI run 43701079034](https://github.com/shahrilyusoff11/duitflow/actions/runs/43701079034)
+completed with **success** on 15 November 2026 at 09:51:30 UTC. The foundation
+job passed install, schema validation, disposable PostgreSQL migrations, lint,
+typecheck, **316/316 tests across 15 files**, production build, Chromium install
+and **28/28 browser tests** (two CI workers). Cleanup passed and the
+failure-artifact upload was skipped as intended.
 
 The separately authorized, read-only `npm run db:status` against the existing
 Neon configuration exited 0 and reported three migrations with the schema up to
 date. No reset, new migration, schema change or synthetic data write was run by
 that check.
+
+### Actual Vercel release and hosted verification
+
+| Release detail | Observed value |
+| --- | --- |
+| Plan / scope | **Hobby**, `SY` / `sy-74fc`; no paid service enabled |
+| Project | `duitflow` / `prj_3N2G8nhG2CQIMOaMGFSPxwLhStRQ` |
+| Deployed source | `ade424e3575464738a3e926a748ef5be81a74981` |
+| Deployment | `dpl_r7u4LcdzNNBGdrcrjbbPHQCxggEA`, **READY** |
+| Build | Basic, 2 vCPU / 8 GB; **1m 53s** |
+| Runtime / function region | **Node 26.x**, `cle1` |
+| Canonical origin | [duitflow-lyart.vercel.app](https://duitflow-lyart.vercel.app) |
+| Public synthetic demo | [Read-only demo](https://duitflow-lyart.vercel.app/demo) |
+| Generated deployment URL | `https://duitflow-5v7l9rcfp-sy-74fc.vercel.app`; deployment protection remains enabled |
+| Release method | Reviewed manual CLI staging and promotion; **no Git auto-deploy integration configured** |
+
+Authenticated CLI checks against the protected staged URL passed: `/`, `/demo`
+and `/sign-in` returned 200, `/api/profile` returned 401, `/dashboard` returned
+307 and `/api/health` returned 200. The deployment was then promoted. Raw
+unauthenticated checks against the canonical public origin returned the same
+expected statuses, including health 200, `Cache-Control: no-store` and the
+configured security headers. CLI access used platform protection authorization;
+application session checks were not bypassed. The CLI automatically created a
+deployment-protection bypass secret; its value was never printed or committed.
+Retain deployment protection on generated/preview URLs.
+
+`npm run verify:app`, with `APP_VERIFY_URL` set to the canonical origin, passed
+using a real headless browser: landing rendered, health → Prisma → Neon returned
+200, anonymous dashboard redirected to sign-in, profile returned 401 and there
+were **zero client runtime errors**. This establishes hosted web/database
+readiness and anonymous denial, not real OAuth consent or bot delivery.
+
+A five-minute runtime-log review observed one `pg` warning about future SSL-mode
+semantics on a healthy `/api/health` request, with no observed request failures.
+No zero-log or production-load/latency claim is made. The release introduced no
+schema change, paid service or live Gemini configuration.
+
+### Remaining owner actions
+
+Production GitHub credentials are scoped to Production. The owner was asked to
+add `https://duitflow-lyart.vercel.app/api/auth/callback/github` to the existing
+OAuth app while retaining its localhost callback, then complete a real
+production sign-in. The owner confirmed the additional callback is saved; real
+production login remains pending. Computer-use
+safety stopped Windows browser URL verification; the agent could not operate
+the owner's UI. No fake session or impersonation was used to fill this gap.
+
+The owner saved Telegram credentials in ignored `.env` (never in chat).
+An official `getMe` request validated `duitflow00bot`. A random webhook secret
+was generated locally, and all three bot variables are scoped to Vercel
+Production. Telegram-enabled deployment, webhook registration and live expense
+confirmation are in progress; no successful delivery is claimed yet.
+Gemini credential setup and live calls remain
+unapproved and disabled. See [the Vercel setup record](VERCEL_SETUP.md).
 
 The production browser suite now verifies precise public demo values, no forms
 or mutation requests, keyboard navigation, no horizontal overflow, same-browser
@@ -96,11 +159,10 @@ Browser migrations use disposable PostgreSQL-compatible storage with every DB
 URL alias and AI credential/provider explicitly overridden. Integration tests
 cover real Prisma/session boundaries with mocked provider transport.
 
-Local checks do not establish hosted cold-start latency, real provider delivery,
-Gemini language accuracy or public availability. Approved Vercel setup is now in
-progress; a successful public release and hosted core-flow evidence are pending.
-Phase 5 can close only after its approved hosted/live checklist passes; Stretch
-is unstarted.
+Automated and hosted readiness checks do not establish cold-start latency,
+real OAuth/bot delivery or Gemini language accuracy. The public web release is
+verified; the remaining owner-dependent core flows above keep Phase 5 open.
+Stretch is unstarted.
 
 ## Phase 4 free-tier AI — implemented and verified locally
 

@@ -377,3 +377,34 @@ Add explicit `.vercelignore` exclusions for all environment files, local Neon
 configuration, interrupted dependencies, generated clients, build output and
 test/browser artifacts before any CLI source upload. Git ignore rules alone do
 not define CLI upload contents. No production DB migration or demo seed is added.
+
+## 2026-11-15 — Vercel release and agent setup
+
+Followed the owner's explicitly requested official get-started guide: installed
+global Vercel CLI 65.16.0, confirmed the existing globally enabled Vercel plugin,
+and added/authenticated the shared user-wide https://mcp.vercel.com server with
+Codex's additive configuration command. Other server entries remain. The new
+server requires a fresh desktop tool catalogue for its authenticated list_teams
+check; do not claim that current-session check passed. The pre-existing desktop
+connector has a different account scope, so release operations use the owner's
+explicitly authenticated CLI account and verified Hobby workspace `sy-74fc`.
+
+Created and linked `duitflow`, configured Next.js, basic Hobby builds and cle1
+functions near the existing Ohio Neon database. Production env uses the same auth
+encryption secret and existing pooled DB, with no secret values in arguments or
+output. Direct migration credentials and production secrets stay out of previews.
+Validated CLI upload inputs and secret exclusions. Git publishing remains manual.
+
+The initial Linux CI run exposed a test-only socket reconnect race after expected
+SQL errors. Add two draining TCP slots while keeping the actual Prisma pool at
+one connection and retain all identity checks; a repeated-error/session regression
+passes. The repaired commit passed all GitHub CI steps (316 tests/28 browsers).
+Staged production checks then passed and the public canonical deployment was
+promoted. Unauthenticated public HTTP and browser/Neon readiness checks passed.
+Record exact IDs and later bot enablement in STATUS.md; no live Gemini calls.
+
+Owner browser actions remain distinct from automation evidence. The owner reports
+the extra GitHub callback is added and saved bot credentials locally. Computer
+use stopped on unverifiable Windows browser URL, so do not automate around that
+safeguard or fabricate a session. Validate/register Telegram through its official
+API with bounded, secret-redacted requests and verify real owner flows separately.

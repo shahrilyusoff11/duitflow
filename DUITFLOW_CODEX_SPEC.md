@@ -345,11 +345,12 @@ See docs/AI_SETUP.md and docs/STATUS.md. Gemini setup/live calls remain gated.
 
 **Local implementation evidence (15 November 2026):** Phase 5 local polish,
 public read-only synthetic `/demo`, screenshots and deployment runbook are
-implemented. Lint, typecheck, 315 unit/integration tests (including 45/45 mocked
+implemented. Lint, typecheck, 316 unit/integration tests (including 45/45 mocked
 AI golden cases), production build and 28 desktop/mobile browser tests pass.
 No account session or real user data is exposed by the public snapshot.
-Provider/dashboard setup and publishing require approval; the public HTTPS URL,
-production webhook and real hosted OAuth/Telegram smoke checks remain pending.
+The owner approved deployment/setup; the public HTTPS web release and hosted
+Neon readiness now pass. Production webhook and real hosted OAuth/Telegram
+smoke checks are in progress. See docs/STATUS.md for current release IDs.
 Gemini credential setup/live calls remain separately unapproved. Overall Phase 5
 deployment acceptance is open. See docs/DEPLOYMENT.md and docs/STATUS.md.
 Stop before Stretch.
@@ -376,7 +377,7 @@ Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram 
 - [x] Unit, authorization/integration and critical E2E tests pass; golden-set report included.
 - [x] Phase 3 unit/integration and critical browser tests pass; Phase 4 golden-set report is in docs/AI_GOLDEN_REPORT.md.
 - [x] Targeted current-source/local-Git-history secret scan has no matches; `.env` is ignored and application secrets stay server-side (not a security certification).
-- [ ] Deploys on free tiers only for small personal non-commercial use.
+- [x] Deployed on Vercel Hobby with existing Neon Free for small personal non-commercial use; no paid service enabled.
 - [x] README covers setup, env vars, architecture, testing, gated deployment, token rotation, privacy/PDPA note and known free-tier limitations.
 - [x] Public read-only synthetic demo, responsive/accessibility polish and screenshots verified locally.
 - [ ] Phase 5 public demo URL, production webhook and live sign-in/web/Telegram confirmation acceptance verified after approval.
