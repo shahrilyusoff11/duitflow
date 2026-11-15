@@ -334,10 +334,10 @@ Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram 
 
 ## 12. Acceptance criteria
 
-- [ ] User can sign in/out and cannot access another user's data (tested).
-- [ ] Transaction CRUD works; amounts are precise; money strings are parsed per §4.4.
-- [ ] Dashboard shows correct monthly income/expense/net using KL dates, including month-boundary cases.
-- [ ] Budgets behave consistently; planned commitments (if built) are never double-counted.
+- [x] User can sign in/out and cannot access another user's data (tested).
+- [x] Transaction CRUD works; amounts are precise; money strings are parsed per §4.4.
+- [x] Dashboard shows correct monthly income/expense/net using KL dates, including month-boundary cases.
+- [x] Budgets behave consistently; planned commitments (if built) are never double-counted.
 - [ ] Telegram links/unlinks securely; unlink invalidates pending actions.
 - [ ] Webhook rejects bad secrets (`401`), ignores non-private chats, and returns `200` for authentic unsupported updates.
 - [ ] A retry after a failed/timed-out update is processed, not dropped; a replay after success is ignored.

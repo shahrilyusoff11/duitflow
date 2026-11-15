@@ -1,4 +1,5 @@
 import Link from "next/link";
+import "../finance.css";
 import { SignOutButton } from "@/components/auth/auth-buttons";
 import { requirePageUser } from "@/lib/auth/session";
 
@@ -10,6 +11,9 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       <Link className="brand" href="/dashboard">DuitFlow<span className="brand-dot">.</span></Link>
       <SignOutButton />
     </header>
+    <nav className="finance-nav wrap" aria-label="Navigasi kewangan">
+      <Link href="/dashboard">Dashboard</Link><Link href="/transactions">Transaksi</Link><Link href="/budgets">Bajet</Link><Link href="/categories">Kategori</Link>
+    </nav>
     <main id="kandungan" className="account-main wrap">{children}</main>
     <footer className="site-footer wrap"><p>DuitFlow · Ruang kewangan peribadi anda.</p><p>MYR / Malaysia</p></footer>
   </>;

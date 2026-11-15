@@ -127,3 +127,49 @@ migrations, lint, typecheck, unit/integration tests, build and browser tests.
 The result was read from the GitHub connector, including per-step conclusions.
 Together with the already verified real GitHub OAuth and Neon flows, this closes
 Phase 1. Phase 2 remains unstarted.
+
+## 2026-11-15 — Phase 2 authorized web finance scope
+
+The owner requested Phase 2 only. Implement category/transaction CRUD, monthly
+server-side dashboard totals and expense-category budgets. Do not implement
+Telegram, AI, deployment, demo accounts or Stretch. Retain Better Auth, existing
+Neon configuration, all three migrations and the atomic signup trigger.
+No dependency, schema migration, provider action or paid service was needed.
+
+Every exported finance DAL entry independently verifies the real database
+session against its required userId. Server actions independently verify the
+session too and derive userId from it. All object reads, edits and deletes are
+owner-scoped; category checks reject both foreign owners and mismatched types.
+The existing composite foreign keys retain protection during concurrent changes.
+In-use category deletion/type changes are restricted, never cascaded. Mutations
+reject demo users. Action errors disclose no record contents or database details.
+Next.js supplies same-origin Server Action protection and its default 1 MB body
+limit; Zod further bounds every persisted field and pagination input.
+
+Prisma's existing Decimal runtime parses complete money strings, performs all
+arithmetic and serializes fixed two-decimal strings. No extra decimal dependency
+is needed. MYR formatting groups string digits without converting money to a
+JavaScript number. The only numeric conversion is a clamped 0–100 progress bar.
+Calendar inputs support 2000–2100. Store local dates as UTC-midnight carriers for
+PostgreSQL DATE, never convert an entered local day through the host timezone.
+Resolve the current day/relative dates in Asia/Kuala_Lumpur. Date filters include
+both entered days; monthly queries use [first day, next month's first day).
+
+Dashboard and budget reads use repeatable-read snapshots. Prisma groupBy/SUM
+computes monthly totals and category breakdown in PostgreSQL. A bounded six-month
+daily aggregate supplies a zero-filled server-rendered trend chart; no complete
+transaction history is transferred for aggregation. Recent records are capped
+at five, paginated transaction lists at 50 per request (20 in the UI). Finance
+results remain uncached. Accessible HTML/CSS charts avoid a new chart dependency.
+
+Budget warning thresholds are configurable from 1–99%, default 80%, with a fixed
+100% limit warning. Exact Decimal comparisons determine warnings before display
+rounding. Overspending preserves negative remaining amounts. One budget per
+expense category/month is enforced by the existing unique index. Planned entries
+are absent and never count as spending.
+
+Tests extend the existing real signed-session/PGlite pattern. Browser finance
+identities are isolated from sign-out tests. All three database URL variables
+remain explicitly overridden in the browser launcher. No live Neon checks or
+real financial writes were performed for Phase 2; live auth/Neon evidence remains
+the Phase 1 record. Phase 3 remains unstarted.

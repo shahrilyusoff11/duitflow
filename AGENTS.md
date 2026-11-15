@@ -15,8 +15,10 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
 ## Current scope and approval gates
 
 - Phase 1 is complete: live OAuth/Neon checks and GitHub CI passed on commit
-  108874011e8af3f8fe733297b650ef3ee20749ba (run 43630396318). Phase 2 has not
-  started; begin it only when requested. The owner approved Better Auth + GitHub-only OAuth +
+  108874011e8af3f8fe733297b650ef3ee20749ba (run 43630396318). The owner requested
+  Phase 2 web finance on 15 November 2026; its implementation and local evidence
+  are recorded in docs/STATUS.md. Stop before Phase 3 unless requested.
+  The owner approved Better Auth + GitHub-only OAuth +
   PostgreSQL database sessions in chat on 15 November 2026. Implement this scope
   without asking for the same approval again. See `docs/AUTH_PROPOSAL.md`.
 - Neon setup via CLI is explicitly authorized: org-withered-mountain-16883150,
@@ -68,7 +70,7 @@ is required for lint, tests, typecheck, generate, or build.
 - `src/app/`: App Router pages, layouts and route handlers. UI defaults to ms-MY.
 - `src/lib/config/`: validation that does not log values or secrets.
 - `src/lib/db/`: server-only low-level connection; import only in auth or DAL.
-- `src/lib/finance/`: finance domain constants and, later, scoped data access.
+- `src/lib/finance/`: scoped finance DAL, money/date validation and aggregates.
 - `src/generated/prisma/`: generated, ignored; regenerate instead of editing.
 - `prisma/migrations/`: reviewed, append-only SQL. Preserve raw CHECK constraints
   and the pending-action partial index when drafting future migrations.

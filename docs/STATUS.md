@@ -1,8 +1,71 @@
 # Implementation status — 15 November 2026
 
-**Phase 1 is complete.** Real OAuth, Neon, local checks and
+**Phases 1 and 2 are complete. Phase 3 has not started.** Phase 2 was explicitly
+requested by the owner and verified locally; no new provider/service setup,
+schema migration or live Neon write was performed.
+
+## Phase 2 finance MVP — implemented and verified locally
+
+- [x] Protected category create/list/edit/delete, including seeded personal
+  categories. PostgreSQL blocks deleting/changing the type of in-use categories.
+- [x] Income/expense transaction create/list/detail/edit/delete. Filters support
+  inclusive date range, category, type and description search, with stable
+  pagination (20 records in UI, maximum 50 through the DAL).
+- [x] Exact money-string parsing and Decimal arithmetic; all money serializes
+  as fixed two-decimal strings. MYR formatting never converts money to a float.
+- [x] Malaysian local calendar DATE handling, server-resolved current day and
+  relative dates, and exclusive next-month boundaries.
+- [x] Server-side monthly income/expenses/recorded net, category breakdown,
+  recent five records and a six-month trend chart, with zero-filled empty months.
+- [x] Monthly expense-category budget create/read/edit/delete, spent/limit/
+  remaining/progress, configurable warning threshold (default 80%) and fixed
+  100% warning. Overspending retains a negative remaining amount.
+- [x] Every finance DAL entry independently verifies a real database session
+  and required userId. Actions derive identity from the session. Owner-scoped
+  queries, category owner/type checks, demo write denial and revoked sessions
+  are tested. No cross-user finance cache exists.
+- [x] Malay UI, functional navigation, labeled forms, pending/success/error
+  feedback, deletion confirmation and loading/empty states.
+- [x] Existing auth, Neon config, migrations and signup trigger preserved.
+- [x] README, decisions, AGENTS.md and specification acceptance checklist updated.
+
+Executed on Windows / Node 26.11.1, npm 11.20.0:
+
+| Phase 2 check | Actual result |
+| --- | --- |
+| npm run lint | Passed, no warnings |
+| npm run typecheck | Passed |
+| npm test | **101 passed** across 6 files (58 new Phase 2 tests) |
+| npm run build | Passed; finance routes are dynamic |
+| npm run test:e2e | **12 passed**, desktop/mobile Chromium, 6 workers |
+| git diff --check | Passed |
+| Visual review | Synthetic desktop/mobile finance dashboard screenshots inspected; mobile overflow assertion passed |
+
+Integration tests execute the actual DAL/actions, real Prisma/pg and persisted
+signed sessions against disposable PGlite. They cover CRUD, owner denial on all
+finance entry points, foreign object IDs, missing userId, category/type mismatch,
+revocation, demo write rejection, input limits, filtering/pagination, budget
+uniqueness and thresholds, exact totals, October/November, December/January and
+leap-day boundaries. Existing SQL-migration/auth tests continue to pass.
+
+The production browser suite exercises real category rename/deletion, transaction
+create/detail/edit/deletion, date/type/search filters, budget creation/edit/deletion,
+80%/100% warnings, dashboard updates, in-use category rejection, and anonymous
+access denial on all finance pages. Finance fixtures have separate users/sessions
+from sign-out fixtures. All database URL aliases are explicitly test-only.
+An initial test navigated too quickly and edited the preceding page's form;
+the final tests wait for the transaction detail heading before entering edits.
+
+No Phase 2 remote CI run or live Neon finance CRUD verification is claimed.
+Phase 1 real OAuth/Neon evidence below remains valid; no credentials, provider
+settings or production financial records were changed. Telegram, AI, deployment
+and Stretch are not implemented. Stop before Phase 3.
+
+## Phase 1 completion record
+
+Real OAuth, Neon, local checks and
 [GitHub CI](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318)
-pass. Phase 2 has not started.
+passed at the Phase 1 checkpoint.
 
 See [the full Neon setup/change record](NEON_SETUP.md).
 
@@ -41,7 +104,7 @@ repository to GitHub and remote CI passed. Vercel, Telegram and Gemini remain un
 - [x] Repository pushed to github.com/shahrilyusoff11/duitflow on main.
 - [x] CI defined for Node 24, disposable PostgreSQL migration, checks and browsers.
 
-## Actual local results
+## Phase 1 actual local results (historical)
 
 Executed on Windows using Node 26.11.1 and npm 11.20.0.
 
@@ -132,6 +195,6 @@ The GitHub connector confirmed the completed run and every required step.
 All Phase 1 acceptance checks now pass. Completion/status documents were updated
 locally after this verified run; no application or workflow code changed.
 
-Phases 2–5 and Stretch remain unstarted. Transaction CRUD, financial aggregates,
-monthly budgets, Telegram, AI, golden-set fixtures and demo/deployment acceptance
-criteria are not claimed complete.
+At that checkpoint Phases 2–5 and Stretch were unstarted. Phase 2 has since been
+implemented and verified as recorded above. Phases 3–5, golden-set fixtures,
+demo/deployment acceptance and Stretch remain unstarted.

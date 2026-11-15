@@ -6,13 +6,14 @@ A personal finance MVP for Malaysia, built incrementally from
 [the specification](DUITFLOW_CODEX_SPEC.md). UI language is Bahasa Melayu,
 currency is MYR, and financial dates use Asia/Kuala_Lumpur.
 
-**Status: Phase 1 complete.** Neon, real GitHub sign-in/out, local checks and
-[GitHub CI](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318)
-all pass. Phase 2 has not started.
-The app includes the approved Better Auth GitHub-only OAuth, database sessions,
-protected account dashboard, atomic per-user category seeding, scoped profile
-access, migrations and CI. Finance CRUD, aggregates, budgets, Telegram and AI are
-later phases. The existing Neon Free production branch is connected and all three
+**Status: Phase 2 finance MVP implemented.** Categories, transaction CRUD,
+server-side monthly aggregates and budgets are available through the protected web app.
+Authentication and Neon configuration are preserved. Phase 3 has not started.
+[Phase 1 GitHub CI](https://github.com/shahrilyusoff11/duitflow/actions/runs/43630396318)
+passed; Phase 2 local verification is recorded in [STATUS.md](docs/STATUS.md).
+The app retains Better Auth GitHub-only OAuth, database sessions,
+atomic per-user category seeding, scoped data access, migrations and CI.
+Telegram and AI remain later phases. The existing Neon Free production branch is connected and all three
 migrations are applied. [Neon setup, complete change record and proof](docs/NEON_SETUP.md).
 
 See [current evidence and acceptance checklist](docs/STATUS.md),
@@ -44,7 +45,8 @@ npm run test:e2e
 Playwright starts the production build on 127.0.0.1:3100 with a disposable,
 test-only PostgreSQL-compatible socket server and signed persisted session
 fixtures. It runs Prisma Migrate and checks desktop/mobile OAuth initiation,
-protected access, profile scoping, sign-out, cookie replay and landing navigation.
+protected access, profile scoping, sign-out, cookie replay, landing navigation,
+and category/transaction/budget CRUD with dashboard updates and warnings.
 The external GitHub screen is intercepted, never called live. Integration tests
 also verify the callback with mocked GitHub HTTP responses. This is separate
 from the required real provider verification.
@@ -136,26 +138,27 @@ table or an explicit identity migration; no names/emails are invented.
 ## Structure
 
 ```text
-src/app/                    Landing, sign-in, protected dashboard, API handlers
+src/app/                    Landing, auth, protected finance pages/actions, APIs
 src/components/auth/        Sign-in/out controls with loading/error feedback
+src/components/finance/     Accessible forms, budget progress, server-rendered chart
 src/lib/auth/               Better Auth, session guards, scoped profile DAL
 src/lib/config/             Validated, redacted database configuration
 src/lib/db/                 Lazy server-only Prisma/pg connection
-src/lib/finance/             Per-user default category definitions
+src/lib/finance/             Scoped DAL, money/date validation, defaults, aggregates
 prisma/schema.prisma        Domain + required OAuth identity/session/state models
 prisma/migrations/          Domain, integrity, auth and category signup trigger
 scripts/                    Safe env initialization and configuration format check
-tests/unit/                 Configuration and redaction tests
-tests/integration/          PostgreSQL SQL-migration/constraint tests
-tests/e2e/                  Production browser smoke tests
+tests/unit/                 Config, money parsing/math, Malaysian calendar tests
+tests/integration/          SQL migrations, real sessions, authorization, finance CRUD
+tests/e2e/                  Production browser auth and finance flows
 docs/                       Decisions, proposal, current status
 .github/workflows/ci.yml     Checks + disposable PostgreSQL migration + browser tests
 ```
 
 ## Architecture
 
-The following is the planned Core architecture. Authentication and the foundation
-are implemented; finance CRUD, Telegram and parsing are later phases.
+The following is the planned Core architecture. Authentication and web finance
+are implemented; Telegram, its webhook and parsing remain later phases.
 
 ```mermaid
 flowchart TD
@@ -174,6 +177,29 @@ Proxy/layout checks alone are insufficient. Monetary values stay as
 DECIMAL(12,2), with decimal arithmetic on the server and string serialization.
 `occurredOn` is a Malaysian local calendar DATE. UTC audit timestamps use
 TIMESTAMPTZ. No balances are fabricated and AI never writes SQL or saves records.
+
+## Using the finance app (Phase 2)
+
+- **Dashboard**: choose a month for income, expenses, recorded net income minus
+  expenses, category breakdown, five recent transactions, budget status and a
+  six-month trend. Every total comes from scoped database aggregates on the server.
+- **Transaksi**: add income/expenses, open a record to edit or delete it, filter
+  by inclusive date range, category, type or description. Lists show 20 records
+  per page; DAL callers cannot request more than 50.
+- **Kategori**: create, rename, change type or delete personal categories.
+  Deleting or changing the type of an in-use category is blocked by PostgreSQL;
+  reassign/remove its transactions and budgets first.
+- **Bajet**: create, edit or delete a monthly expense-category budget. Warnings
+  default to 80% (configurable 1–99%), with a fixed warning at 100%. Remaining
+  amounts can be negative when overspent. Only recorded expenses count as spent.
+
+Money input accepts `RM12`, `RM 12`, `rm12.50`, `RM1,200.50`, `12 ringgit`,
+`12 ringgit 50 sen`, `1.2k`, `2k` and `50 sen`. Zero, negatives, ambiguous
+`1.200`, excess precision and values above RM10,000,000 are rejected.
+Dates accept real calendar days from 2000 through 2100; the default day is
+resolved in Asia/Kuala_Lumpur on the server. Monthly ranges use an exclusive
+next-month boundary. No shared finance cache, schema change, new service or
+provider credential is needed for Phase 2. Demo writes are blocked.
 
 ## CI and verification
 
@@ -213,7 +239,7 @@ Only synthetic records are used in tests. No live financial records, provider
 credentials, or raw chat messages are committed or logged. AI parsing will be
 explicitly opt-in, with a provider data-use notice and minimal prompt payload.
 A future demo account must be read-only or safely reset and must block Telegram
-linking and AI. No demo credentials or transaction features exist in this foundation.
+linking and AI. No demo credentials are provided; finance mutations reject demo users.
 
 If credentials leak: revoke the Telegram bot token through BotFather
 `/revoke`, replace the webhook secret with a new random secret, revoke/replace
