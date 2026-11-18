@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "src/generated/**",
     ".bootstrap/**",
+    ".vercel/**",
     ".node_modules-interrupted-*/**",
     "playwright-report/**",
     "test-results/**",

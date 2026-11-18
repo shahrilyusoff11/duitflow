@@ -1,0 +1,37 @@
+.transactions-title { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 22px; }
+.transactions-title > a { display: none; }
+.transactions-layout { --activity-inset: clamp(16px, 2vw, 28px); display: grid; grid-template-columns: minmax(300px, .78fr) minmax(0, 1.65fr); align-items: start; gap: 20px; }
+.transaction-entry, .transaction-records { min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; scroll-margin-top: 16px; overflow-wrap: anywhere; }
+.transaction-entry > header { display: flex; align-items: center; gap: 12px; padding: 17px var(--activity-inset); background: #e9f1e8; border-bottom: 1px solid #d5e1d5; border-radius: 15px 15px 0 0; }
+.entry-icon { display: grid; place-items: center; width: 35px; height: 35px; border-radius: 10px; background: #d3e5d7; color: #295c49; }
+.transactions-layout h2 { font-size: 21px; font-weight: 650; letter-spacing: -.045em; }
+.transaction-entry .finance-form, .entry-no-categories { padding: 20px var(--activity-inset) 24px; margin: 0; }
+.transaction-entry .entry-form fieldset { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: start; gap: 16px 10px; }
+.transaction-entry fieldset > :is(label, p, button) { grid-column: 1 / -1; }
+.transaction-entry fieldset > label:has(select) { grid-column: auto; }
+.transaction-entry fieldset > button { width: 100%; margin-top: 2px; }
+.transaction-entry input[name="amount"] { font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.category-help { grid-column: 1 / -1; font-size: 14px; }
+.category-help .text-link { margin: 0; }
+.records-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 17px var(--activity-inset) 10px; }
+.records-heading > span { background: #edf1e9; color: #476051; padding: 3px 9px; border-radius: 25px; font-size: 13px; }
+.record-filters { padding: 0 var(--activity-inset) 8px; }
+.record-filters summary { display: flex; width: fit-content; align-items: center; gap: 8px; list-style: none; }
+.record-filters summary::-webkit-details-marker { display: none; }
+.record-filters[open] summary svg:last-child { transform: rotate(180deg); }
+.record-filters .filter-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; margin: 2px 0 12px; }
+.record-filters .filter-form label { width: 100%; max-width: none; }
+.record-search, .filter-actions { grid-column: 1 / -1; }
+.filter-actions, .records-pages { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
+.records-pages, .records-empty { border-top: 1px solid var(--line); padding: 15px var(--activity-inset); font-size: 14px; }
+.records-pages span { margin-right: auto; color: var(--muted); }
+.records-pages a { min-height: 44px; align-content: center; text-decoration: underline; }
+.records-empty { color: var(--muted); padding-block: 32px; text-align: center; }
+.records-empty svg { margin: 0 auto 10px; }
+@media (max-width: 860px) {
+  .transactions-layout { grid-template-columns: 1fr; }
+  .transactions-title > a { display: inline-flex; }
+}
+@media (max-width: 380px) {
+  .transaction-entry fieldset > label:has(select), .record-filters .filter-form > label { grid-column: 1 / -1; }
+}

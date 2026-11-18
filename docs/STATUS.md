@@ -1,4 +1,4 @@
-# Implementation status — 15 November 2026
+# Implementation status — 18 November 2026
 
 **Phases 1–5 are complete.** The approved Vercel Hobby release and public demo
 are live. Local/CI tests, automated hosted readiness and official Telegram
@@ -8,6 +8,45 @@ smoke checks. Approved real auth and synthetic finance/bot writes occurred;
 no schema migration, new application dependency or paid service was introduced in Phase 5.
 Gemini credentials and live calls remain unapproved and disabled. Stretch is
 unstarted; stop here.
+
+## Frontend redesign — 18 November 2026
+
+- [x] The Transaksi entry and edit forms show categories for the selected type.
+  Record filters retain compatible category selections across type changes.
+  Verified expense/income switching, clearing invalid selections, editing a
+  saved expense, applying/resetting filters and consecutive saves on desktop
+  and mobile. Lint, typecheck, build, 317 unit/integration tests and 30
+  browser tests passed.
+
+- [x] Fixed a dashboard development error reported as Prisma P2028. Holding
+  the application's single connection for three seconds reproduced the same
+  transaction acquisition timeout on a disposable database. Prisma now waits
+  up to the driver's ten-second acquisition limit. The regression passed,
+  four concurrent signed-in fixture dashboard loads rendered in development,
+  and the local dev server served a subsequent dashboard request. Lint,
+  typecheck, build, all 317 unit/integration tests and 30 browser tests passed.
+
+- [x] Revised the dashboard cards after owner feedback. The selected month's
+  recorded net leads the summary, followed by income and spending with the
+  previous month's totals. Verified the synthetic demo at 320, 390, 768 and
+  1440 pixels and reviewed signed-in empty and negative-net fixtures.
+
+- [x] Updated the Malay landing page, sign-in, read-only demo and signed-in
+  finance UI. The dashboard links directly to transaction entry. Categories
+  are grouped by type and edited on demand.
+- [x] Verified precise summary values, keyboard access to the chart's monthly
+  figures, read-only demo behavior, finance CRUD and settings flows using the
+  disposable browser database.
+- [x] Local lint, typecheck and production build passed. All 316 unit and
+  integration tests and all 30 desktop/mobile Chromium tests passed. The
+  activity checks cover five linked transactions, signed income and expenses,
+  an empty budget for the selected month and keyboard access to details.
+- [x] Checked the landing page, sign-in and demo from 320 to 1440 pixels for
+  horizontal overflow. Reviewed desktop/mobile screenshots and refreshed the
+  two public synthetic demo images in the README.
+
+The redesign is available locally. The production release evidence below
+refers to the 15 November deployment.
 
 ## Phase 5 polish and deployment — complete
 

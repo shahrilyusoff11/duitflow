@@ -1,5 +1,13 @@
 # Decisions
 
+## 2026-11-18 — Frontend redesign
+
+The landing page, public demo and signed-in dashboard share a server-rendered
+monthly summary. Public pages use the fixed demo snapshot. A grouped bar chart
+shows six months of income and expenses with a keyboard-accessible table of
+exact amounts. Category editors use native disclosure controls to shorten the
+page on mobile. The Kuala Lumpur illustration is served locally as WebP.
+
 ## 2026-11-15 — Phase 1 scope
 
 The original repository contained only DUITFLOW_CODEX_SPEC.md. Work begins with

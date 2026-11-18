@@ -1,0 +1,8 @@
+.signin-layout { display: grid; grid-template-columns: 1.03fr 1fr; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; background: var(--surface); margin-bottom: 30px; min-height: min(660px, 75svh); }
+.signin-art { background: #1e3942 url("/senja-kl.webp") 76% center / cover; }
+.signin-layout .auth-card { align-self: center; justify-self: center; width: min(100%, 520px); padding: clamp(24px, 4vw, 56px); border: 0; }
+.signin-layout .auth-card .text-link { margin-top: 24px; }
+@media (max-width: 700px) {
+  .signin-layout { grid-template-columns: 1fr; min-height: 0; }
+  .signin-art { height: clamp(135px, 28vw, 210px); background-position: 60% 33%; }
+}

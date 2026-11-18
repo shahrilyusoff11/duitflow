@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Brand } from "@/components/brand";
 import "../finance.css";
 import { SignOutButton } from "@/components/auth/auth-buttons";
 import { FinanceNavigation } from "@/components/finance/navigation";
@@ -9,7 +9,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   return <>
     <a className="skip-link" href="#kandungan">Langkau ke kandungan</a>
     <header className="site-header wrap">
-      <Link className="brand" href="/dashboard">DuitFlow<span className="brand-dot">.</span></Link>
+      <Brand href="/dashboard" />
       <SignOutButton />
     </header>
     <FinanceNavigation />

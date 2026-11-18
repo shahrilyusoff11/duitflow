@@ -54,7 +54,7 @@ try {
   });
   if (migrationCode !== 0) throw new Error("Browser test migration failed");
 
-  for (const project of ["desktop", "mobile", "finance-desktop", "finance-mobile", "telegram-desktop", "telegram-mobile", "telegram-linked-desktop", "telegram-linked-mobile", "ai-desktop", "ai-mobile"]) {
+  for (const project of ["desktop", "mobile", "finance-desktop", "finance-mobile", "activity-desktop", "activity-mobile", "telegram-desktop", "telegram-mobile", "telegram-linked-desktop", "telegram-linked-mobile", "ai-desktop", "ai-mobile"]) {
     await embedded.query(`INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES ($1, $2, $3, now())`,
       [`browser-${project}`, `${project === "desktop" ? "Desktop" : "Mobile"} Test`, `${project}@example.test`]);
     await embedded.query(`INSERT INTO "Session" ("id", "token", "userId", "expiresAt", "updatedAt") VALUES ($1, $2, $3, now() + interval '1 hour', now())`,

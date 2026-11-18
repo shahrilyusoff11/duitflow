@@ -39,7 +39,13 @@ callback and real sign-in; demo data remains separate from their account.
 
 </details>
 
-Screenshots contain synthetic data only.
+The screenshots show the local frontend redesign using synthetic data. The
+six-month chart includes an expandable table of exact MYR values. On the
+signed-in dashboard, **Tambah transaksi** opens the entry form directly.
+Select a recent transaction to view its details. The monthly budget appears
+below the ledger, followed by expandable categories and account information.
+On **Transaksi**, choosing **Perbelanjaan** or **Pendapatan** narrows the
+category list when adding, editing or filtering records.
 
 ## Run locally
 

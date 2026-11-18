@@ -1,0 +1,35 @@
+.transaction-ledger { container-type: inline-size; overflow-wrap: anywhere; }
+.ledger-columns, .ledger-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 2fr) minmax(0, 1.1fr) minmax(0, .9fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding-inline: var(--activity-inset);
+}
+.ledger-columns { padding-block: 9px; background: #f3f4ee; border-block: 1px solid #e1e4dc; color: #53645d; font-size: 12px; font-weight: 600; }
+.ledger-columns span:first-child { grid-column: span 2; }
+.ledger-columns span:last-child, .ledger-money { text-align: right; }
+.ledger-list { padding: 0; margin: 0; list-style: none; }
+.ledger-list li + li { border-top: 1px solid #e8eae4; }
+.ledger-row { min-height: 65px; padding-block: 12px; line-height: 1.35; transition: background .15s ease; }
+.ledger-row:hover { background: #f4f6ef; }
+.ledger-list li:last-child .ledger-row { border-radius: 0 0 15px 15px; }
+.ledger-row:focus-visible { outline-offset: -4px; }
+.ledger-mark { display: grid; place-items: center; flex: none; }
+.ledger-mark { width: 36px; height: 36px; border-radius: 50%; background: #f7e8dc; color: #8a4a2b; }
+.ledger-row[data-flow="INCOME"] .ledger-mark { color: #206747; background: #dfede2; }
+.ledger-name, .ledger-money { min-width: 0; font-size: 15px; font-weight: 650; letter-spacing: -.015em; }
+.ledger-money { font-variant-numeric: tabular-nums; }
+.ledger-row[data-flow="INCOME"] .ledger-money { color: #206747; }
+.ledger-category { justify-self: start; background: #eff1eb; color: #475953; border-radius: 6px; padding: 4px 9px; font-size: 12px; }
+.ledger-date { font-size: 14px; color: var(--muted); }
+@container (max-width: 600px) {
+  .ledger-columns { display: none; }
+  .ledger-list { border-top: 1px solid var(--line); }
+  .ledger-row { grid-template-columns: 30px minmax(0, 1fr) minmax(80px, 38%); gap: 3px 9px; }
+  .ledger-mark { width: 30px; height: 30px; grid-row: span 2; }
+  .ledger-name { grid-column: 2; grid-row: 1; }
+  .ledger-category { grid-column: 2; grid-row: 2; background: transparent; padding: 0; }
+  .ledger-money { grid-column: 3; grid-row: 1; }
+  .ledger-date { grid-column: 3; grid-row: 2; text-align: right; font-size: 12px; }
+}

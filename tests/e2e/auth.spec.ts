@@ -8,7 +8,10 @@ test("a real database session opens only its owner's space and sign-out revokes 
   await context.addCookies([{ name: cookie.slice(0, separator), value: cookie.slice(separator + 1), url: "http://127.0.0.1:3100", httpOnly: true, sameSite: "Lax" }]);
   await page.goto("/dashboard");
   await expect(page.getByRole("heading", { name: /Selamat datang/ })).toBeVisible();
+  await expect(page.getByText(`${project}@example.test`, { exact: true })).toBeHidden();
+  await page.getByText("Maklumat anda", { exact: true }).press("Enter");
   await expect(page.getByText(`${project}@example.test`, { exact: true })).toBeVisible();
+  await page.locator("summary").filter({ hasText: "Kategori anda" }).click();
   await expect(page.getByRole("listitem")).toHaveCount(10);
   await expect(page.getByText("Tidak aktif", { exact: true })).toBeVisible();
   const profile = await context.request.get("/api/profile?userId=someone-else");
