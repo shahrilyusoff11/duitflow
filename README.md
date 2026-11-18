@@ -12,7 +12,8 @@ UI uses Bahasa Melayu, MYR and Malaysian calendar dates.
 pass. The owner confirmed real GitHub sign-in/out/re-login, synthetic web CRUD,
 Telegram linking and one confirmed bot expense with no duplicate on re-tap.
 Bot: [@duitflow00bot](https://t.me/duitflow00bot). DeepSeek Flash is available
-in Production for Telegram users who opt in from Settings. Stretch is unstarted.
+in Production for Telegram users who opt in from Settings. Recurring bills are
+available in this checkout and await a production release.
 
 - [Implementation evidence and acceptance status](docs/STATUS.md)
 - [Actual Vercel setup and release record](docs/VERCEL_SETUP.md)
@@ -86,13 +87,16 @@ sessions**: see [the auth decision](docs/AUTH_PROPOSAL.md) and
 | Categories | Personal defaults, atomic signup seeding, owner/type constraints and in-use deletion protection |
 | Dashboard | Server-computed monthly totals, category breakdown, recent records and six-month trend |
 | Budgets | Monthly category limits, exact spent/remaining amounts and configurable warnings |
+| Recurring bills | Monthly or yearly bills, a 30-day forecast, and prefilled expense confirmation |
 | Telegram | Single-use linking, private-chat commands, clarification, Sahkan/Batal and replay-safe writes |
 | Optional AI | Consent off by default; bounded extraction, fixed scoped queries, Postgres caps and deterministic fallback |
 | Public demo | Immutable synthetic snapshot isolated from real accounts and provider calls |
 
-Recorded net means income minus recorded expenses for the selected period,
-not a bank balance. Recurring commitments, wallets, CSV export and Telegram
-proposal editing are Stretch features and are excluded.
+Recorded net means income minus recorded expenses for the selected period.
+Open **Bil akan datang → Urus bil** to plan recurring bills. **Rekod bayaran**
+prefills the bill's name, amount, and today's payment date. Confirming records
+the actual expense and moves the bill's next due date forward. Planned bills
+stay out of spending totals until a payment is confirmed.
 
 Money accepts `RM12`, `RM1,200.50`, `12 ringgit 50 sen`, `1.2k` and `50 sen`.
 Zero, negatives, ambiguous precision and amounts above RM10,000,000 are rejected.
@@ -132,7 +136,7 @@ src/lib/finance/         Scoped DAL, Decimal money, dates and aggregates
 src/lib/telegram/        Parser, transport, connection DAL and retry state
 src/lib/ai/              Optional adapter, validation, consent and fixed answers
 src/lib/demo/            Synthetic public demo data only
-prisma/migrations/       Three reviewed, append-only SQL migrations
+prisma/migrations/       Reviewed, append-only SQL migrations
 scripts/                Setup and verification utilities
 tests/                  Unit, disposable DB integration, browser and golden cases
 docs/                   Setup, approval plans, evidence and screenshots
@@ -187,8 +191,9 @@ anonymous denial; it does not perform real OAuth consent or bot delivery.
 ## Telegram and optional AI
 
 Follow [Telegram setup](docs/TELEGRAM_SETUP.md) after provider setup is approved.
-Settings generates a single-use, ten-minute link; unlinking invalidates pending
-links and proposals. Only linked private-chat users can query stored records.
+Settings generates a ten-minute link. Open it in Telegram and enter the bot's
+code in signed-in Settings to activate the connection. Unlinking invalidates
+pending links and proposals. Only linked private-chat users can query records.
 
 Commands: `/start`, `/help`, `/link`, `/balance`, `/budget`, `/report`, `/cancel`.
 Financial commands also accept `YYYY-MM`. Try synthetic messages such as
@@ -207,10 +212,11 @@ DeepSeek consent defaults off, including for users with the legacy preference
 enabled. The owner approved metered Flash usage on the existing API account.
 See the [AI setup guide](docs/AI_SETUP.md).
 
-Local caps are 2 calls/minute and 30/24 hours per user, plus 4/minute and 30/24
-hours across the app. Missing configuration, opt-out, cap, invalid output or
-timeout uses local parsing. The application contract passes [45/45 mocked
-golden cases](docs/AI_GOLDEN_REPORT.md).
+The local parser runs first. Supported financial questions stay on the server.
+Optional AI suggests categories using app-owned keywords and generic labels.
+The AI caps are 2/minute and 30/24 hours per user, plus 4/minute and 30/24 hours
+across the app. Missing configuration, opt-out, cap, invalid output or timeout
+uses local handling. See the [mocked golden set](docs/AI_GOLDEN_REPORT.md).
 
 ## Checks and evidence
 
@@ -269,8 +275,9 @@ backup automation or CSV export. Do not keep the only copy of important records
 here. Telegram cleanup is lazy and bounded; no cron, Redis or separate backend.
 
 Use synthetic portfolio data. Bot messages pass through Telegram. With AI consent
-and activation, new eligible messages, the local date and category names are
-sent to DeepSeek. No credentials, linking URLs, cookies or
+and activation, DeepSeek receives selected bookkeeping keywords, direction and
+generic category labels. Amounts, dates, descriptions and custom labels stay in
+DuitFlow. No credentials, linking URLs, cookies or
 real financial messages belong in logs, tests, screenshots or Git. Before wider
 use, obtain a security/privacy review and assess Malaysian PDPA obligations.
 This app has no bank connections, payments, transfers or financial advice.

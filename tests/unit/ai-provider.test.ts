@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { deepseekProvider } from "../../src/lib/ai/provider";
 
-const request = { message: "Synthetic lunch RM12", today: "2026-11-15", categoryNames: ["Makanan & Minuman"] };
+const request = { message: "Item 1: EXPENSE; lunch", categoryNames: ["Makanan & Minuman"] };
 const fetchMock = vi.fn();
 const response = (message: object = { content: '{"synthetic":true}' }, finishReason = "stop") => new Response(JSON.stringify({
   choices: [{ index: 0, message: { role: "assistant", ...message }, finish_reason: finishReason }],
@@ -51,6 +51,14 @@ describe("bounded direct DeepSeek adapter (mock HTTP only)", () => {
   });
   it("rejects oversized inputs before any network request", async () => {
     await expect(deepseekProvider("synthetic-key").parse({ ...request, message: "x".repeat(4001) }, new AbortController().signal)).rejects.toThrow(/^AI_PROVIDER_UNAVAILABLE$/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it.each([
+    { ...request, message: "Paid RM12 to a private name" },
+    { ...request, message: "Item 1: EXPENSE; lunch testname" },
+    { ...request, categoryNames: ["User-authored category"] },
+  ])("refuses unprojected data at the provider boundary", async (input) => {
+    await expect(deepseekProvider("synthetic-key").parse(input, new AbortController().signal)).rejects.toThrow(/^AI_PROVIDER_UNAVAILABLE$/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it("redacts network errors", async () => {

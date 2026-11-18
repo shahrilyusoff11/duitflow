@@ -66,7 +66,8 @@ Before writing auth code, check the current status and recommended usage of Auth
 - Users link/unlink Telegram from a protected Settings page.
 - Linking uses a **short-lived, single-use, server-generated token** tied to the signed-in user. Constraints:
   - Telegram `/start <payload>` payloads are limited to **64 characters of `A-Za-z0-9_-`**. Generate the token accordingly (e.g. base64url of 24–32 random bytes, within the limit).
-  - Store only a hash of the token. Expire in ~10 minutes. Mark `consumedAt` atomically on redemption.
+  - Store only a hash of the token. Expire in ~10 minutes. Mark `consumedAt` atomically on activation.
+  - The bot provides a short-lived confirmation code. Only authenticated Settings can confirm the code and activate the claimed Telegram identity.
 - Never trust a `telegram_user_id` submitted from the browser.
 - One Telegram identity cannot connect to multiple accounts. Handle conflicts safely with a clear message; do not silently re-link.
 - **On unlink:** delete the `TelegramConnection` and invalidate (consume or delete) all that user's pending Telegram actions.
@@ -109,7 +110,7 @@ Before writing auth code, check the current status and recommended usage of Auth
 ### 4.6 Budgets (Core) and recurring commitments (Stretch)
 
 - Monthly budget per expense category. Show spent vs. limit and remaining; warn at configurable thresholds (defaults 80% and 100%).
-- **Recurring commitments (Stretch):** planning records only (name, amount, category, cadence, next due date, active flag). Do **not** auto-create transactions. Do not include planned commitments in "spent" totals, to avoid double counting. If a posting workflow is ever added, it must be explicit, opt-in and idempotent.
+- **Recurring bills (approved Stretch):** track the name, amount, expense category, monthly or yearly cadence, next due date and active flag. Show the next 30 days of projected bills and their total on the dashboard. Planned amounts stay out of spending totals. **Rekod bayaran** opens a prefilled expense for review. Explicit confirmation saves the expense and advances the schedule atomically. A stale confirmation cannot record the payment twice.
 
 ### 4.7 Telegram bot
 
@@ -159,12 +160,12 @@ Approval must be idempotent under double-taps and replays. Within a single DB tr
 
 ### 4.8 AI parsing and financial Q&A
 
-- AI responsibilities: classify intent; extract zero or more proposed transactions; suggest categories; produce relative date expressions; flag uncertainty.
-- Define strict Zod schemas for `intent`, `transactions[]`, `uncertainty[]`, `requiresConfirmation` and query parameters. Reject unknown intents and extra fields.
+- The backend recognizes supported financial questions and parses transaction amounts and dates. Optional AI suggests a generic category for each numbered transaction clause.
+- Validate `intent`, `transactions[]`, `requiresConfirmation` and query parameters using strict Zod schemas. Reject unknown intents and extra fields.
 - **AI output is untrusted.** The model has no authority to write SQL, choose a user ID, call tools, or save anything. User text and model output are data, never privileged instructions (prompt-injection safe).
 - Multiple purchases in one message → multiple proposed transactions in one approval.
 - Ambiguous amount/date/category → ask; never fabricate values.
-- **Enumerated query operations** (the model may only select one and supply validated parameters; each is a fixed server-side function scoped to the linked user):
+- **Enumerated query operations** use locally recognized intent and validated parameters. Each operation is scoped to the linked user.
 
   | Operation | Params (Zod) | Result |
   |---|---|---|
@@ -176,9 +177,9 @@ Approval must be idempotent under double-taps and replays. Within a single DB tr
 
   Unknown category names are fuzzy-matched on the server against that user's categories; if no confident match, ask the user.
 - Answers are rendered from real query results. **Never hallucinate balances.**
-- **Privacy / AI opt-in:** make DeepSeek parsing a **per-user setting that defaults off**, with a clear notice in Settings. When enabled and available, send only the message text, today's local date and the category name list. Never send full history, profile names, emails, tokens or IDs. When off or unavailable, use the deterministic parser.
+- **Privacy / AI opt-in:** DeepSeek defaults off per user. The current hardening keeps financial questions, amount/date/description extraction and custom categories local. An opted-in fallback sends only app-owned keywords, locally derived transaction direction and generic categories. Model suggestions must correspond to individual source clauses. Known sensitive input stays local.
 - **Deterministic fallback** handles at least: `Makan RM12`, `Gaji RM2500`, `<description> <amount>`, `/balance`, `/budget`, `/report`. Distinguish "unsupported freeform language" from "parsed successfully" and tell the user which commands/formats still work.
-- **Rate limiting without Redis:** use a Postgres table (e.g. `RateLimitEvent(userId or ip hash, bucket, createdAt)`) to cap AI calls per user per day/minute and login attempts. Fail closed to the deterministic parser when the AI cap is hit.
+- **Rate limiting without Redis:** use Postgres buckets for AI attempts, login and new Telegram updates at both sender and project scope where applicable. When AI reaches its cap, keep local handling available.
 
 ## 5. Suggested data model (adapt as needed)
 
@@ -187,11 +188,11 @@ Approval must be idempotent under double-taps and replays. Within a single DB tr
 - `Transaction`: id, userId, categoryId, type (`INCOME`/`EXPENSE`), amount `Decimal(12,2)`, description, **`occurredOn` Date**, source (`WEB`/`TELEGRAM`), createdAt, updatedAt. Indexes: `(userId, occurredOn)`, `(userId, categoryId, occurredOn)`.
 - `Budget`: id, userId, categoryId, year, month, `limitAmount Decimal(12,2)`; unique `(userId, categoryId, year, month)`.
 - `TelegramConnection`: id, `userId` unique, `telegramUserId` unique (string or BigInt), linkedAt.
-- `TelegramLinkToken`: id, userId, `hashedToken` (unique), expiresAt, consumedAt nullable.
+- `TelegramLinkToken`: id, userId, `hashedToken` (unique), pending Telegram identity, expiresAt, consumedAt nullable.
 - `TelegramUpdate`: `telegramUpdateId` unique, status (`RECEIVED`/`PROCESSING`/`DONE`/`FAILED`), attempts, lockedAt, updatedAt.
 - `PendingTelegramAction`: id (UUID), userId, telegramUserId, kind (`PROPOSAL`/`CLARIFICATION`), validated JSON payload (or normalized child rows), expiresAt, consumedAt, createdAt.
 - `RateLimitEvent`: key, bucket, createdAt (indexed for window queries).
-- **Stretch:** `FinancialAccount` (id, userId, name, type, createdAt), optional `financialAccountId` on `Transaction`; `RecurringCommitment` (id, userId, categoryId, name, `amount Decimal(12,2)`, cadence, nextDueOn Date, isActive, createdAt, updatedAt). Name finance accounts `FinancialAccount` to avoid collision with Auth.js `Account`.
+- **Stretch:** `RecurringBill` (id, userId, expense categoryId, name, `amount Decimal(12,2)`, cadence, nextDueOn Date, preferred day, active flag, version and audit timestamps). Optional future `FinancialAccount` (id, userId, name, type, createdAt) and `financialAccountId` on `Transaction`. Name finance accounts `FinancialAccount` to avoid collision with the authentication `Account` model.
 
 Cascade deletes only where appropriate (e.g. deleting a user removes their data; deleting a category in use must be blocked or reassign).
 
@@ -266,7 +267,7 @@ src/
     (auth)/
     (dashboard)/
       dashboard/ transactions/ budgets/ settings/
-      commitments/        # Stretch
+      bills/              # Approved recurring bills
     api/telegram/webhook/route.ts
   components/{finance,ui}/
   lib/
@@ -358,10 +359,10 @@ sessions. CI for the deployed source passes all steps (316 tests, 28 browsers).
 Phase 5 is complete; distinguish automated evidence from owner-confirmed live
 flows in docs/STATUS.md. Gemini setup/live calls remain separately unapproved.
 See docs/DEPLOYMENT.md and docs/VERCEL_SETUP.md for exact release/setup details.
-Stop before Stretch.
+Recurring bills were approved after Phase 5. Other Stretch features remain gated.
 
 ### Stretch (after Phase 5, each optional)
-Recurring commitments (planning only), `FinancialAccount`, CSV export, Telegram proposal editing, expanded Playwright suite.
+Recurring bills with explicit payment confirmation, `FinancialAccount`, CSV export, Telegram proposal editing, expanded Playwright suite.
 
 ## 12. Acceptance criteria
 

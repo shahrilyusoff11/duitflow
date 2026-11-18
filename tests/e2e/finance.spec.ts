@@ -116,7 +116,7 @@ test("web finance CRUD updates monthly totals and budget warnings", async ({ pag
 });
 
 test("finance pages independently reject anonymous access", async ({ page }) => {
-  for (const path of ["/transactions", "/transactions/unknown", "/budgets", "/categories"]) {
+  for (const path of ["/transactions", "/transactions/unknown", "/budgets", "/categories", "/bills", "/bills/unknown/payment"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/sign-in$/);
   }

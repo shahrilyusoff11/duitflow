@@ -12,24 +12,19 @@ export const financeQuerySchema = z.discriminatedUnion("operation", [
 ]);
 export type FinanceQuery = z.infer<typeof financeQuerySchema>;
 
-// All identity, money arithmetic, date resolution and authorization stay local.
-// Null represents a missing/ambiguous extraction; it is never filled by guessing.
+// The model classifies numbered items. User-authored values stay on the server.
 export const aiOutputSchema = z.object({
-  intent: z.enum(["add_transactions", "query", "unsupported"]),
+  intent: z.enum(["add_transactions", "unsupported"]),
   transactions: z.array(z.object({
+    sourceIndex: z.number().int().min(1).max(10),
     type: z.enum(["INCOME", "EXPENSE"]),
-    amount: z.string().min(1).max(80).nullable(),
-    description: z.string().trim().min(1).max(500),
     categoryName: categoryName.nullable(),
-    dateExpression: z.string().min(1).max(40).nullable(),
   }).strict()).max(10),
-  uncertainty: z.array(z.enum(["amount", "date", "category", "intent"])).max(4),
   requiresConfirmation: z.boolean(),
-  query: financeQuerySchema.nullable(),
 }).strict().superRefine((value, ctx) => {
   const valid = value.intent === "add_transactions"
-    ? value.requiresConfirmation && value.transactions.length > 0 && value.query === null
-    : value.transactions.length === 0 && !value.requiresConfirmation && (value.intent === "query" ? value.query !== null : value.query === null);
+    ? value.requiresConfirmation && value.transactions.length > 0
+    : value.transactions.length === 0 && !value.requiresConfirmation;
   if (!valid) ctx.addIssue({ code: "custom", message: "INVALID_AI_INTENT" });
 });
 

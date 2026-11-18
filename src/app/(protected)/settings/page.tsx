@@ -34,11 +34,11 @@ export default async function SettingsPage() {
     <section className="account-card" aria-label="Privasi dan penghuraian AI">
       <h2>Penghuraian AI pilihan</h2>
       <p>Persetujuan anda: <strong>{ai.deepseekParsingEnabled ? "Dihidupkan" : "Dimatikan"}</strong>. AI {aiAvailable ? "tersedia" : "belum tersedia; peraturan tempatan digunakan"}.</p>
-      <p>Apabila dihidupkan dan tersedia, DuitFlow menghantar mesej baharu daripada chat peribadi bot, tarikh tempatan hari ini dan nama kategori kepada DeepSeek Flash. Sejarah transaksi, nama profil, e-mel, ID dan token tidak disertakan.</p>
-      <p>Gunakan contoh sintetik untuk percubaan ini. Elakkan maklumat sensitif, sulit atau peribadi dalam mesej dan nama kategori, termasuk butiran bank.</p>
+      <p>DuitFlow cuba peraturan tempatan dahulu. Jika bantuan diperlukan dan anda bersetuju, DeepSeek Flash menerima kata kunci terpilih, jenis transaksi dan senarai kategori umum. Teks penuh, amaun, tarikh dan nama kategori anda kekal di DuitFlow.</p>
+      <p>DeepSeek menggunakan cache untuk permintaan API. Mesej dan balasan juga disimpan dalam chat awan Telegram. Elakkan maklumat sensitif, termasuk butiran bank.</p>
       <p>AI boleh tersilap. Semak amaun, tarikh dan kategori; hanya butang Sahkan menyimpan transaksi. Jawapan kewangan dikira daripada rekod tersimpan. Jika AI gagal atau had dicapai, gunakan Makan RM12, Gaji RM2500, /balance, /budget atau /report.</p>
       <p>Mematikan AI menghentikan penghantaran seterusnya. Permintaan yang sudah dihantar tidak boleh ditarik balik.</p>
-      <p><a className="text-link" href="https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html" target="_blank" rel="noopener noreferrer">Terma API DeepSeek</a></p>
+      <p><a className="text-link" href="https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html" target="_blank" rel="noopener noreferrer">Terma API DeepSeek</a> · <a className="text-link" href="https://api-docs.deepseek.com/guides/kv_cache/" target="_blank" rel="noopener noreferrer">Cache API DeepSeek</a></p>
       <AiSettingsForm enabled={ai.deepseekParsingEnabled} isDemo={ai.isDemo} />
     </section>
   </>;

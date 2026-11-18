@@ -54,7 +54,7 @@ try {
   });
   if (migrationCode !== 0) throw new Error("Browser test migration failed");
 
-  for (const project of ["desktop", "mobile", "finance-desktop", "finance-mobile", "activity-desktop", "activity-mobile", "telegram-desktop", "telegram-mobile", "telegram-linked-desktop", "telegram-linked-mobile", "ai-desktop", "ai-mobile"]) {
+  for (const project of ["desktop", "mobile", "finance-desktop", "finance-mobile", "activity-desktop", "activity-mobile", "bills-desktop", "bills-mobile", "telegram-desktop", "telegram-mobile", "telegram-linked-desktop", "telegram-linked-mobile", "telegram-confirm-desktop", "telegram-confirm-mobile", "ai-desktop", "ai-mobile"]) {
     await embedded.query(`INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES ($1, $2, $3, now())`,
       [`browser-${project}`, `${project === "desktop" ? "Desktop" : "Mobile"} Test`, `${project}@example.test`]);
     await embedded.query(`INSERT INTO "Session" ("id", "token", "userId", "expiresAt", "updatedAt") VALUES ($1, $2, $3, now() + interval '1 hour', now())`,
@@ -63,6 +63,10 @@ try {
   for (const [device, telegramUserId] of [["desktop", "900000001"], ["mobile", "900000002"]]) {
     await embedded.query(`INSERT INTO "TelegramConnection" ("id", "userId", "telegramUserId") VALUES ($1, $2, $3)`,
       [`browser-telegram-connection-${device}`, `browser-telegram-linked-${device}`, telegramUserId]);
+  }
+  for (const [device, sender, digit] of [["desktop", "900000003", "3"], ["mobile", "900000004", "4"]]) {
+    await embedded.query(`INSERT INTO "TelegramLinkToken" ("id", "userId", "hashedToken", "pendingTelegramUserId", "expiresAt")
+      VALUES ($1, $2, $3, $4, now() + interval '10 minutes')`, [`browser-link-${device}`, `browser-telegram-confirm-${device}`, digit.repeat(64), sender]);
   }
   application = spawn(process.execPath, [require.resolve("next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", "3100"], {
     env: environment, stdio: "inherit", windowsHide: true,

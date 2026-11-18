@@ -1,3 +1,4 @@
+import { createHmac } from "node:crypto";
 import { expect, test, type BrowserContext } from "@playwright/test";
 import { fixtureSessionCookie } from "../helpers/session-cookie";
 
@@ -48,6 +49,29 @@ test("settings requires explicit unlink confirmation and allows a fresh link", a
 test("settings rejects anonymous access", async ({ page }) => {
   await page.goto("/settings");
   await expect(page).toHaveURL(/\/sign-in$/);
+});
+
+test("settings links only after entering the matching bot challenge", async ({ page, context }, testInfo) => {
+  const device = testInfo.project.name.startsWith("mobile") ? "mobile" : "desktop";
+  const digit = device === "mobile" ? "4" : "3";
+  const code = createHmac("sha256", "synthetic-telegram-webhook-secret-longer-than32")
+    .update(`telegram-link-confirmation:${digit.repeat(64)}:90000000${digit}`).digest().subarray(0, 12).toString("base64url");
+  await signIn(context, `telegram-confirm-${device}`);
+  await page.goto("/settings");
+  const connection = page.getByRole("region", { name: "Sambungan Telegram", exact: true });
+  const input = connection.getByLabel("Kod pengesahan daripada bot");
+  const confirm = connection.getByRole("button", { name: "Sahkan sambungan Telegram", exact: true });
+  await expect(connection).toContainText("Belum disambungkan");
+  await input.fill("X".repeat(16));
+  await confirm.click();
+  await expect(connection.getByRole("alert")).toContainText("Kod tidak sah");
+  await expect(connection).toContainText("Belum disambungkan");
+  await input.fill(code);
+  await confirm.click();
+  await expect(connection.getByText("Disambungkan", { exact: true })).toBeVisible();
+  await expect(connection.getByRole("status")).toContainText("Telegram berjaya disambungkan");
+  await page.reload();
+  await expect(connection.getByText("Disambungkan", { exact: true })).toBeVisible();
 });
 
 test("AI consent defaults off, requires a checkbox, persists and can be withdrawn without a key", async ({ page, context }, testInfo) => {

@@ -3,8 +3,8 @@
 import { Fragment, useActionState, useId, useState } from "react";
 import { mutateFinance } from "@/app/(protected)/actions";
 
-export function MutationForm({ operation, id, label = "Simpan", destructive = false, children }: {
-  operation: string; id?: string; label?: string; destructive?: boolean; children?: React.ReactNode;
+export function MutationForm({ operation, id, version, label = "Simpan", destructive = false, children }: {
+  operation: string; id?: string; version?: number; label?: string; destructive?: boolean; children?: React.ReactNode;
 }) {
   const [state, action, pending] = useActionState(mutateFinance, { message: "", ok: false });
   const [confirmed, setConfirmed] = useState(false);
@@ -14,6 +14,7 @@ export function MutationForm({ operation, id, label = "Simpan", destructive = fa
   return <form action={action} onReset={transactionEntry ? () => setFieldsVersion((version) => version + 1) : undefined} className={children ? "finance-form entry-form" : "finance-form"} aria-busy={pending} aria-describedby={state.message ? feedbackId : undefined}>
     <input type="hidden" name="operation" value={operation} />
     {id && <input type="hidden" name="id" value={id} />}
+    {version !== undefined && <input type="hidden" name="version" value={version} />}
     <fieldset disabled={pending}>
       <Fragment key={fieldsVersion}>{children}</Fragment>
       {destructive && !confirmed ? <button type="button" className="danger" onClick={() => setConfirmed(true)}>{label}</button> : <>

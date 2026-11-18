@@ -11,11 +11,13 @@ import { parseWithAi } from "@/lib/ai/parser";
 import { queryTelegramFinance } from "./dal";
 import { renderFinanceAnswer } from "@/lib/ai/render";
 
-const linkInstructions = "Buka DuitFlow di web, log masuk dan pilih Tetapan > Telegram. Jana pautan baharu dan buka pautan itu dalam chat peribadi bot ini. Pautan luput selepas 10 minit.";
+const linkInstructions = "Log masuk ke DuitFlow dan buka Tetapan > Telegram. Jana pautan, buka chat bot ini dan masukkan kod yang diberi dalam Tetapan. Pautan luput selepas 10 minit.";
 const help = "DuitFlow: catat belanja dengan pengesahan.\nContoh: Makan RM12, Gaji RM2500, kopi RM8 lepas tu minyak RM40.\n/balance — pendapatan, belanja dan bersih bulan ini\n/budget — status bajet bulan ini\n/report — ringkasan bulan ini\n/cancel — batal cadangan atau soalan\n/link — cara sambungkan akaun\nBoleh tambah YYYY-MM selepas arahan laporan. Untuk ubah cadangan, batal dan hantar semula.";
 
 type Markup = { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> };
-async function reply(chatId: string, text: string, markup?: Markup) {
+type LinkedUser = NonNullable<Awaited<ReturnType<typeof resolveTelegramUser>>>;
+
+async function reply(chatId: string, text: string, markup?: Markup, linked?: LinkedUser) {
   // Telegram's message limit is 4096 characters. Preserve every proposal value
   // across bounded messages; only the last part carries confirmation buttons.
   const chunks: string[] = [];
@@ -28,29 +30,35 @@ async function reply(chatId: string, text: string, markup?: Markup) {
     chunk += `${chunk ? "\n" : ""}${remainder}`;
   }
   if (chunk) chunks.push(chunk);
-  for (const [index, content] of chunks.entries()) await sendMessage(chatId, content, index === chunks.length - 1 ? markup : undefined);
+  for (const [index, content] of chunks.entries()) {
+    if (linked) {
+      const current = await resolveTelegramUser(chatId);
+      if (!current || current.id !== linked.id || current.connectionId !== linked.connectionId) return;
+    }
+    await sendMessage(chatId, content, index === chunks.length - 1 ? markup : undefined);
+  }
 }
 
-async function presentStored(chatId: string, pending: Awaited<ReturnType<typeof replacePendingAction>>, categories: TelegramCategory[]) {
+async function presentStored(chatId: string, pending: Awaited<ReturnType<typeof replacePendingAction>>, categories: TelegramCategory[], linked: LinkedUser) {
   if (pending.consumedAt || pending.expiresAt <= new Date()) { await reply(chatId, "Cadangan ini sudah diproses atau tamat tempoh. Hantar mesej baharu untuk membuat cadangan lain."); return; }
   if (pending.kind === "CLARIFICATION") {
     const payload = clarificationSchema.safeParse(pending.payload);
-    await reply(chatId, payload.success ? clarificationQuestion(payload.data, categories) : "Cadangan tidak tersedia. Gunakan /cancel dan hantar semula.");
+    await reply(chatId, payload.success ? clarificationQuestion(payload.data, categories) : "Cadangan tidak tersedia. Gunakan /cancel dan hantar semula.", undefined, linked);
     return;
   }
   const payload = proposalSchema.safeParse(pending.payload);
   if (!payload.success) { await reply(chatId, "Cadangan tidak tersedia. Gunakan /cancel dan hantar semula."); return; }
   const byId = new Map(categories.map((category) => [category.id, category.name]));
   const lines = payload.data.transactions.map((item, index) => `${index + 1}. ${item.description}\n${item.type === "INCOME" ? "Pendapatan" : "Belanja"}: ${formatMyr(item.amount)} · ${byId.get(item.categoryId) ?? "kategori tidak tersedia"} · ${item.occurredOn}`);
-  await reply(chatId, `Semak cadangan ini sebelum simpan:\n${lines.join("\n")}\nBelum disimpan. Luput selepas 10 minit. Untuk ubah, batal dan hantar semula.`, { inline_keyboard: [[{ text: "Sahkan", callback_data: `a:${pending.id}` }, { text: "Batal", callback_data: `c:${pending.id}` }]] });
+  await reply(chatId, `Semak cadangan ini sebelum simpan:\n${lines.join("\n")}\nBelum disimpan. Luput selepas 10 minit. Untuk ubah, batal dan hantar semula.`, { inline_keyboard: [[{ text: "Sahkan", callback_data: `a:${pending.id}` }, { text: "Batal", callback_data: `c:${pending.id}` }]] }, linked);
 }
 
-async function present(userId: string, telegramUserId: string, chatId: string, result: ParseResult, categories: TelegramCategory[], updateId: number) {
+async function present(user: LinkedUser, telegramUserId: string, chatId: string, result: ParseResult, categories: TelegramCategory[], updateId: number) {
   if (result.kind === "UNSUPPORTED") { await reply(chatId, result.message); return; }
-  const pending = await replacePendingAction(userId, telegramUserId, result.kind, result.payload, updateId);
+  const pending = await replacePendingAction(user.id, telegramUserId, result.kind, result.payload, updateId);
   // The DAL can return an existing action for a replay. Render its persisted
   // values and status, never a newly parsed interpretation of the same update.
-  await presentStored(chatId, pending, categories);
+  await presentStored(chatId, pending, categories, user);
 }
 
 async function processCallback(update: TelegramUpdate) {
@@ -76,7 +84,7 @@ async function processCallback(update: TelegramUpdate) {
     const saved = await approvePendingAction(user.id, telegramUserId, data[2]);
     if (!saved) return;
     notification = "Transaksi disimpan.";
-    await reply(chatId, `Disimpan:\n${saved.map((item) => `${item.description}: ${formatMyr(item.amount)} · ${item.categoryName} · ${item.occurredOn}`).join("\n")}`);
+    await reply(chatId, `Disimpan:\n${saved.map((item) => `${item.description}: ${formatMyr(item.amount)} · ${item.categoryName} · ${item.occurredOn}`).join("\n")}`, undefined, user);
   } catch (error) {
     processingFailed = true;
     throw error;
@@ -97,7 +105,7 @@ async function processMessage(update: TelegramUpdate) {
   if (command && command[1].toLowerCase() === "start" && command[2]) {
     const token = command[2].trim();
     const result = /^[A-Za-z0-9_-]{32,64}$/.test(token) ? await redeemLinkToken(token, telegramUserId) : "INVALID";
-    await reply(chatId, result === "LINKED" ? `Telegram berjaya disambungkan.\n${help}` : result === "CONFLICT" ? "Akaun atau identiti Telegram ini sudah disambungkan. Putuskan sambungan di web dahulu; sambungan sedia ada dikekalkan." : "Pautan tidak sah, sudah digunakan atau tamat tempoh. Jana pautan baharu dalam Tetapan DuitFlow.");
+    await reply(chatId, result === "CONFLICT" ? "Pautan atau identiti Telegram ini sudah digunakan. Semak sambungan dalam Tetapan DuitFlow." : result === "INVALID" ? "Pautan tidak sah, sudah digunakan atau tamat tempoh. Jana pautan baharu dalam Tetapan DuitFlow." : `Kod pengesahan DuitFlow: ${result.code}\nMasukkan kod ini dalam Tetapan DuitFlow untuk melengkapkan sambungan. Jangan kongsi kod ini.`);
     return;
   }
   const user = await resolveTelegramUser(telegramUserId);
@@ -118,11 +126,11 @@ async function processMessage(update: TelegramUpdate) {
     const period = periodResult.data;
     if (operation === "budget") {
       const budgets = await getTelegramBudgets(user.id, telegramUserId, period);
-      await reply(chatId, budgets.length ? `Bajet ${period}:\n${budgets.map((row) => `${row.categoryName}: belanja ${formatMyr(row.spent)} / ${formatMyr(row.limitAmount)}; baki ${formatMyr(row.remaining)}`).join("\n")}` : `Tiada bajet untuk ${period}. Tetapkan bajet di web.`);
+      await reply(chatId, budgets.length ? `Bajet ${period}:\n${budgets.map((row) => `${row.categoryName}: belanja ${formatMyr(row.spent)} / ${formatMyr(row.limitAmount)}; baki ${formatMyr(row.remaining)}`).join("\n")}` : `Tiada bajet untuk ${period}. Tetapkan bajet di web.`, undefined, user);
     } else {
       const report = await getTelegramReport(user.id, telegramUserId, period);
       const base = `${period}\nPendapatan: ${formatMyr(report.income)}\nBelanja: ${formatMyr(report.expense)}\nBersih direkod (pendapatan − belanja): ${formatMyr(report.net)}`;
-      await reply(chatId, operation === "balance" ? base : `${base}\nBelanja mengikut kategori:\n${report.breakdown.map((row) => `${row.categoryName}: ${formatMyr(row.amount)}`).join("\n") || "Tiada belanja."}\nTransaksi terkini:\n${report.recent.map((row) => `${row.occurredOn} · ${row.description}: ${formatMyr(row.amount)} (${row.type === "INCOME" ? "pendapatan" : "belanja"})`).join("\n") || "Tiada transaksi."}`);
+      await reply(chatId, operation === "balance" ? base : `${base}\nBelanja mengikut kategori:\n${report.breakdown.map((row) => `${row.categoryName}: ${formatMyr(row.amount)}`).join("\n") || "Tiada belanja."}\nTransaksi terkini:\n${report.recent.map((row) => `${row.occurredOn} · ${row.description}: ${formatMyr(row.amount)} (${row.type === "INCOME" ? "pendapatan" : "belanja"})`).join("\n") || "Tiada transaksi."}`, undefined, user);
     }
     return;
   }
@@ -131,7 +139,7 @@ async function processMessage(update: TelegramUpdate) {
   await reply(chatId, "Sedang memproses…");
   const categories = await getTelegramCategories(user.id, telegramUserId);
   const previousDelivery = await getActionForUpdate(user.id, telegramUserId, update.update_id);
-  if (previousDelivery) { await presentStored(chatId, previousDelivery, categories); return; }
+  if (previousDelivery) { await presentStored(chatId, previousDelivery, categories, user); return; }
   const pending = await getPendingAction(user.id, telegramUserId);
   const continuation = pending?.kind === "CLARIFICATION" ? continueClarification(pending.payload, text, categories) : null;
   // Casual approval can never become a new AI proposal or a write.
@@ -139,14 +147,14 @@ async function processMessage(update: TelegramUpdate) {
   const result = continuation ?? (casualApproval ? parseTelegramText(text, categories) : await parseWithAi(user.id, telegramUserId, text, categories));
   if (result.kind === "QUERY") {
     if (pending?.kind === "CLARIFICATION") await cancelPendingAction(user.id, telegramUserId);
-    await reply(chatId, renderFinanceAnswer(await queryTelegramFinance(user.id, telegramUserId, result.query)));
+    await reply(chatId, renderFinanceAnswer(await queryTelegramFinance(user.id, telegramUserId, result.query)), undefined, user);
     return;
   }
   if (!continuation && result.kind === "UNSUPPORTED" && pending?.kind === "PROPOSAL" && /^(ya|yes|ok|sahkan)$/i.test(text)) {
     await reply(chatId, "Tekan butang Sahkan pada cadangan tertentu untuk menyimpan. /cancel untuk batal.");
     return;
   }
-  await present(user.id, telegramUserId, chatId, result, categories, update.update_id);
+  await present(user, telegramUserId, chatId, result, categories, update.update_id);
 }
 
 export async function processTelegramUpdate(update: TelegramUpdate) {

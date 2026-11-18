@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { goldenCases } from "../fixtures/ai-golden";
 import { continueClarification, type TelegramCategory } from "../../src/lib/telegram/parser";
 import { interpretAiOutput, matchCategory, resolveAiDate } from "../../src/lib/ai/interpret";
+import { prepareAiInput } from "../../src/lib/ai/input";
 import { getAiConfig, DEEPSEEK_MODEL, AI_TIMEOUT_MS, readAiEnvironment } from "../../src/lib/config/ai";
 
 const mocks = vi.hoisted(() => ({ consume: vi.fn(), parse: vi.fn() }));
@@ -42,28 +43,44 @@ describe(`mocked AI golden set (${goldenCases.length} cases)`, () => {
 });
 
 describe("AI availability, privacy and failure boundaries", () => {
-  it("sends only message, current Malaysian date and category names", async () => {
+  it("sends only allowlisted words and static categories, and handles simple input locally", async () => {
     mocks.parse.mockRejectedValue(new Error("synthetic-secret-output"));
-    expect((await parseWithAi("private-id", "12345", "Makan RM12", categories, now)).kind).toBe("PROPOSAL");
-    expect(mocks.parse.mock.calls[0][0]).toEqual({ message: "Makan RM12", today: "2026-11-01", categoryNames: categories.map((cat) => cat.name) });
+    await parseWithAi("private-id", "12345", "Makan RM12", categories, now);
+    expect(mocks.parse).not.toHaveBeenCalled();
+    await parseWithAi("private-id", "12345", "Paid RM18.92 for lunch with Testname on 2026-11-02", [
+      ...categories, { id: "private-category", name: "Private custom label", transactionType: "EXPENSE" },
+    ], now);
+    const payload = mocks.parse.mock.calls[0][0];
+    expect(Object.keys(payload).sort()).toEqual(["categoryNames", "message"]);
+    expect(payload.message).toBe("Item 1: EXPENSE; lunch");
+    for (const value of ["Testname", "18.92", "2026-11-02", "Private custom label", "private-id", "12345"]) expect(JSON.stringify(payload)).not.toContain(value);
     expect(mocks.parse.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
+  });
+  it.each(["Paid RM12 for coffee user@example.test", "Paid RM12 for coffee bank account", "Paid RM12 for coffee 123456789012", "Paid RM12 for coffee OTP"])("keeps blocked sensitive patterns local", async (message) => {
+    await parseWithAi("u", "1", message, categories, now);
+    expect(mocks.consume).not.toHaveBeenCalled();
+    expect(mocks.parse).not.toHaveBeenCalled();
+  });
+  it.each(["Show my balance and spending for last month?", "Show 2 or 3 latest transactions", "How much did I spend on food this month and last month?"])("rejects ambiguous questions locally", async (message) => {
+    expect((await parseWithAi("u", "1", message, categories, now)).kind).toBe("UNSUPPORTED");
+    expect(mocks.parse).not.toHaveBeenCalled();
   });
   it("works with no key and never requests dispatch permission", async () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "");
-    expect((await parseWithAi("u", "12345", "Makan RM12", categories, now)).kind).toBe("PROPOSAL");
+    expect((await parseWithAi("u", "12345", "Paid RM12 for lunch", categories, now)).kind).toBe("UNSUPPORTED");
     expect(mocks.consume).not.toHaveBeenCalled(); expect(mocks.parse).not.toHaveBeenCalled();
   });
   it.each(["quota", "consent", "database failure"])("falls back when %s denies AI", async (reason) => {
     if (reason === "database failure") mocks.consume.mockRejectedValue(new Error("private-db-details"));
     else mocks.consume.mockResolvedValue(false);
-    expect((await parseWithAi("u", "12345", "Makan RM12", categories, now)).kind).toBe("PROPOSAL");
+    expect((await parseWithAi("u", "12345", "Paid RM12 for lunch", categories, now)).kind).toBe("UNSUPPORTED");
     expect(mocks.parse).not.toHaveBeenCalled();
   });
   it("bounds a hung provider and aborts it before falling back", async () => {
     vi.useFakeTimers(); mocks.parse.mockReturnValue(new Promise(() => undefined));
-    const result = parseWithAi("u", "12345", "Makan RM12", categories, now);
+    const result = parseWithAi("u", "12345", "Paid RM12 for lunch", categories, now);
     await vi.advanceTimersByTimeAsync(AI_TIMEOUT_MS);
-    expect((await result).kind).toBe("PROPOSAL");
+    expect((await result).kind).toBe("UNSUPPORTED");
     expect(mocks.parse.mock.calls[0][1].aborted).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -73,7 +90,7 @@ describe("AI availability, privacy and failure boundaries", () => {
   });
   it("clarifies an invalid date then accepts only a server-validated reply", () => {
     const fixture = goldenCases.find((item) => item.name === "Invalid date")!;
-    const result = interpretAiOutput(JSON.stringify(fixture.output), fixture.message, categories, now);
+    const result = interpretAiOutput(JSON.stringify(fixture.output), prepareAiInput(fixture.message)!.items, categories, now);
     expect(result.kind).toBe("CLARIFICATION");
     if (result.kind !== "CLARIFICATION") throw new Error();
     expect(continueClarification(result.payload, "2026-02-30", categories)).toBeNull();
@@ -87,11 +104,17 @@ describe("AI availability, privacy and failure boundaries", () => {
     expect(matchCategory("constructor", categories, "EXPENSE")).toBeUndefined();
     expect(matchCategory("makan", [...categories, { id: "custom", name: "makan", transactionType: "EXPENSE" }], "EXPENSE")?.id).toBe("custom");
   });
-  it("rejects positive or incomplete substrings of full money phrases", () => {
-    for (const [message, amount] of [["Makan − RM12", "RM12"], ["Makan 50 sen", "50"], ["Kopi 12 ringgit 50 sen", "12 ringgit"], ["Makan RM1 200", "RM1"]]) {
-      const raw = JSON.stringify({ intent: "add_transactions", transactions: [{ type: "EXPENSE", description: "Synthetic", amount, categoryName: "Makanan & Minuman", dateExpression: "today" }], query: null, uncertainty: [], requiresConfirmation: true });
-      expect(() => interpretAiOutput(raw, message, categories, now)).toThrow("UNGROUNDED_AMOUNT");
-    }
+  it("binds one result to each source clause and derives full money phrases locally", () => {
+    const input = prepareAiInput("Kopi 50 sen then paid 12 ringgit 50 sen for lunch")!;
+    const item = { sourceIndex: 1, type: "EXPENSE", categoryName: "Makanan & Minuman" };
+    const raw = (transactions: object[]) => JSON.stringify({ intent: "add_transactions", transactions, requiresConfirmation: true });
+    expect(() => interpretAiOutput(raw([item, item]), input.items, categories, now)).toThrow("UNGROUNDED_TRANSACTION");
+    expect(() => interpretAiOutput(raw([item, { ...item, sourceIndex: 2, type: "INCOME" }]), input.items, categories, now)).toThrow("UNGROUNDED_TRANSACTION");
+    expect(() => interpretAiOutput(raw([item, { ...item, sourceIndex: 2, amount: "12" }]), input.items, categories, now)).toThrow();
+    expect(interpretAiOutput(raw([{ ...item, sourceIndex: 2 }, item]), input.items, categories, now)).toMatchObject({
+      kind: "PROPOSAL", payload: { transactions: [{ amount: "0.50" }, { amount: "12.50" }] },
+    });
+    for (const message of ["Makan − RM12", "Makan RM1 200"]) expect(prepareAiInput(message)?.items[0].amount).toBeUndefined();
   });
   it("enables the fixed Flash model with a key and rejects invalid settings without revealing secrets", () => {
     const key = "synthetic-key-longer-than20";

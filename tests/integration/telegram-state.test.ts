@@ -7,7 +7,10 @@ vi.mock("@/lib/db", () => ({ getDatabase: () => context.database }));
 import { claimTelegramUpdate, cleanupTelegramState, finishTelegramUpdate, TELEGRAM_LEASE_MS, TelegramUpdateBusyError } from "../../src/lib/telegram/state";
 let db: Awaited<ReturnType<typeof createTestDatabase>>;
 beforeAll(async () => { db = await createTestDatabase(); context.database = db.prisma; });
-beforeEach(async () => { await db.prisma.telegramUpdate.deleteMany(); });
+beforeEach(async () => {
+  await db.prisma.telegramUpdate.deleteMany();
+  await db.prisma.rateLimitEvent.deleteMany();
+});
 afterAll(async () => { await db?.close(); });
 
 describe("durable Telegram update leases", () => {
@@ -46,13 +49,25 @@ describe("durable Telegram update leases", () => {
     expect((await claimTelegramUpdate(103))?.attempt).toBe(1);
     for (const value of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) await expect(claimTelegramUpdate(value)).rejects.toThrow("INVALID_TELEGRAM_UPDATE_ID");
   });
-  it("bounds lazy cleanup and retains retryable states", async () => {
+  it("bounds lazy cleanup and ages out abandoned metadata without deleting recent failures", async () => {
     const old = new Date(Date.now() - 8 * 24 * 60 * 60_000);
     await db.prisma.telegramUpdate.createMany({ data: Array.from({ length: 105 }, (_, index) => ({ telegramUpdateId: index, status: "DONE" as const, updatedAt: old })) });
     await db.prisma.telegramUpdate.createMany({ data: [{ telegramUpdateId: 200, status: "FAILED", updatedAt: old }, { telegramUpdateId: 201, status: "PROCESSING", updatedAt: old }] });
+    await db.prisma.telegramUpdate.create({ data: { telegramUpdateId: 202, status: "FAILED" } });
     await cleanupTelegramState();
-    expect(await db.prisma.telegramUpdate.count({ where: { status: "DONE" } })).toBe(5);
-    expect(await db.prisma.telegramUpdate.count({ where: { status: { in: ["FAILED", "PROCESSING"] } } })).toBe(2);
+    expect(await db.prisma.telegramUpdate.count()).toBe(8);
+    await cleanupTelegramState();
+    expect(await db.prisma.telegramUpdate.findMany()).toMatchObject([{ telegramUpdateId: BigInt(202) }]);
+  });
+  it("limits new sender traffic while allowing admitted retries and separate approval capacity", async () => {
+    const now = new Date();
+    const traffic = { sender: "12345", kind: "message" as const, secret: "synthetic-hmac-key" };
+    for (let index = 0; index < 12; index++) expect(await claimTelegramUpdate(index, now, traffic)).not.toBeNull();
+    expect(await claimTelegramUpdate(12, now, traffic)).toBeNull();
+    expect(await db.prisma.telegramUpdate.count()).toBe(12);
+    expect(await claimTelegramUpdate(13, now, { ...traffic, kind: "callback" })).not.toBeNull();
+    await expect(claimTelegramUpdate(0, now, traffic)).rejects.toBeInstanceOf(TelegramUpdateBusyError);
+    expect((await claimTelegramUpdate(0, new Date(now.getTime() + TELEGRAM_LEASE_MS), traffic))?.attempt).toBe(2);
   });
   it("retains pending-action replay tombstones for seven days after expiry", async () => {
     const user = await db.prisma.user.create({ data: { name: "Synthetic cleanup", email: `cleanup-${crypto.randomUUID()}@example.test` } });
@@ -61,6 +76,6 @@ describe("durable Telegram update leases", () => {
     const recent = await db.prisma.pendingTelegramAction.create({ data: { ...record, expiresAt: new Date(Date.now() - 2 * 24 * 60 * 60_000) } });
     await cleanupTelegramState();
     expect(await db.prisma.pendingTelegramAction.findUnique({ where: { id: old.id } })).toBeNull();
-    expect(await db.prisma.pendingTelegramAction.findUnique({ where: { id: recent.id } })).not.toBeNull();
+    expect(await db.prisma.pendingTelegramAction.findUnique({ where: { id: recent.id } })).toMatchObject({ payload: null });
   });
 });

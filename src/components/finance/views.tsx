@@ -16,6 +16,12 @@ export function TransactionFields({ categories, value }: { categories: Categorie
   const defaultType = categories.some((category) => category.transactionType === "EXPENSE") ? "EXPENSE" : "INCOME";
   return <>
     <TypeCategoryFields categories={categories} initialType={value?.type ?? defaultType} initialCategory={value?.categoryId} />
+    <TransactionDetailsFields value={value} />
+  </>;
+}
+
+export function TransactionDetailsFields({ value }: { value?: { amount: string; description: string; occurredOn: string } }) {
+  return <>
     <label>Amaun (MYR)<input name="amount" type="text" inputMode="decimal" defaultValue={value?.amount} placeholder="RM12.50" maxLength={80} title="Amaun positif, maksimum dua tempat perpuluhan. Contoh: RM12.50 atau 12 ringgit 50 sen." required /></label>
     <label>Keterangan<input name="description" defaultValue={value?.description} placeholder="Contoh: Makan tengah hari" maxLength={500} required /></label>
     <label>Tarikh<input name="occurredOn" type="date" defaultValue={value?.occurredOn ?? todayInMalaysia()} min="2000-01-01" max="2100-12-31" required /></label>

@@ -22,7 +22,7 @@ function inferCategory(description: string, type: "INCOME" | "EXPENSE", categori
   const lower = description.toLocaleLowerCase("ms-MY");
   const exact = eligible.filter((category) => lower === category.name.toLocaleLowerCase("ms-MY"));
   if (exact.length === 1) return exact[0].id;
-  const matches = eligible.filter((category) => categoryKeywords[category.name]?.test(description));
+  const matches = eligible.filter((category) => Object.hasOwn(categoryKeywords, category.name) && categoryKeywords[category.name].test(description));
   return matches.length === 1 ? matches[0].id : undefined;
 }
 
@@ -43,7 +43,7 @@ export function parseTelegramText(text: string, categories: TelegramCategory[], 
     let description = part;
     let occurredOn = todayInMalaysia(now);
     const dates = [...description.matchAll(/\b(?:\d{4}-\d{2}-\d{2}|hari ini|today|semalam|yesterday|kelmarin|minggu lepas)\b/gi)];
-    if (dates.length > 1 || /\b(esok|tomorrow|minggu depan|last month|bulan lepas)\b/i.test(description)) return unsupported();
+    if (dates.length > 1 || /\b(esok|tomorrow|minggu depan|next week|last month|bulan lepas|hari tu|the other day|\d{1,2}[/.]\d{1,2}[/.]\d{2,4})\b/i.test(description)) return unsupported();
     if (dates[0]) {
       const dateText = dates[0][0].toLowerCase();
       try {

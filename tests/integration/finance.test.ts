@@ -26,6 +26,7 @@ async function signIn(userId: string) {
   context.requestHeaders = new Headers({ cookie: fixtureSessionCookie(session.token, environment.BETTER_AUTH_SECRET) });
 }
 const transaction = (categoryId: string, amount = "12.50", occurredOn = "2026-11-01", type = "EXPENSE") => ({ categoryId, amount, occurredOn, type, description: "Synthetic record" });
+const bill = (categoryId: string, nextDueOn: string, amount = "12.50") => ({ name: "Synthetic bill", categoryId, nextDueOn, amount, cadence: "MONTHLY", active: "yes" });
 
 beforeAll(async () => {
   db = await createTestDatabase();
@@ -46,6 +47,59 @@ beforeEach(async () => {
 afterAll(async () => { vi.unstubAllEnvs(); await db?.close(); });
 
 describe("finance CRUD through real sessions and Prisma", () => {
+  it("shows the exact 30-day bill total using Malaysian dates, including month-end occurrences", async () => {
+    const recurring = await finance.createBill(alice, bill(expense, "2026-01-31"));
+    const overdue = await finance.createBill(alice, { ...bill(expense, "2025-02-01", "0.10"), cadence: "YEARLY" });
+    await finance.createBill(alice, bill(expense, "2026-03-02", "50"));
+    await finance.createBill(alice, { ...bill(expense, "2026-02-01", "100"), active: "no" });
+    await signIn(bob);
+    await finance.createBill(bob, bill(foreignCategory, "2026-02-01", "400"));
+    await signIn(alice);
+    const result = await finance.getUpcomingBills(alice, new Date("2026-01-30T16:05:00Z"));
+    expect(result).toMatchObject({ total: "25.10", overdue: 1, occurrences: [
+      { id: recurring.id, dueOn: "2026-01-31", canPay: true },
+      { id: overdue.id, dueOn: "2026-02-01", canPay: false },
+      { id: recurring.id, dueOn: "2026-02-28", canPay: false },
+    ] });
+    expect((await finance.getDashboard(alice, "2026-02")).expense).toBe("0.00");
+  });
+
+  it("claims each confirmed bill payment once and preserves the preferred day after February", async () => {
+    const { id } = await finance.createBill(alice, bill(expense, "2026-01-31"));
+    const payment = { amount: "13.20", description: "Actual payment", occurredOn: "2026-02-01" };
+    await expect(finance.recordBillPayment(alice, id, "0", { ...payment, amount: "-2" })).rejects.toThrow();
+    expect(await finance.getBill(alice, id)).toMatchObject({ version: 0, nextDueOn: "2026-01-31" });
+    const attempts = await Promise.allSettled(Array.from({ length: 2 }, () => finance.recordBillPayment(alice, id, "0", payment)));
+    expect(attempts.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(attempts.find(({ status }) => status === "rejected")).toMatchObject({ reason: { code: "BILL_CHANGED" } });
+    expect((await finance.listTransactions(alice)).rows).toMatchObject([{ amount: "13.20", occurredOn: "2026-02-01", type: "EXPENSE", source: "WEB" }]);
+    expect(await finance.getBill(alice, id)).toMatchObject({ version: 1, nextDueOn: "2026-02-28", amount: "12.50" });
+    await expect(finance.updateBill(alice, id, "0", bill(expense, "2026-01-31"))).rejects.toMatchObject({ code: "BILL_CHANGED" });
+    await finance.updateBill(alice, id, "1", { ...bill(expense, "2026-02-28"), name: "Renamed bill" });
+    await finance.recordBillPayment(alice, id, "2", { ...payment, occurredOn: "2026-02-28" });
+    expect(await finance.getBill(alice, id)).toMatchObject({ nextDueOn: "2026-03-31", version: 3 });
+    await finance.deleteBill(alice, id, "3");
+    expect((await finance.listTransactions(alice)).total).toBe(2);
+  });
+
+  it("scopes bill access and enforces the expense category and read-only boundary", async () => {
+    const { id } = await finance.createBill(alice, bill(expense, "2026-11-18"));
+    for (const categoryId of [income, foreignCategory]) {
+      await expect(finance.createBill(alice, bill(categoryId, "2026-11-18"))).rejects.toMatchObject({ code: "CATEGORY_MISMATCH" });
+    }
+    await expect(db.prisma.recurringBill.update({ where: { id }, data: { categoryId: foreignCategory } })).rejects.toMatchObject({ code: "P2003" });
+    await expect(finance.deleteCategory(alice, expense)).rejects.toMatchObject({ code: "P2003" });
+    await signIn(bob);
+    expect(await finance.getBill(bob, id)).toBeNull();
+    await expect(finance.listBills(alice)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(finance.deleteBill(bob, id, "0")).rejects.toMatchObject({ code: "BILL_CHANGED" });
+    await expect(finance.recordBillPayment(bob, id, "0", { amount: "12.50", description: "Payment", occurredOn: "2026-11-18" })).rejects.toMatchObject({ code: "BILL_CHANGED" });
+    await signIn(alice);
+    await db.prisma.user.update({ where: { id: alice }, data: { isDemo: true } });
+    await expect(finance.deleteBill(alice, id, "0")).rejects.toMatchObject({ code: "DEMO_READ_ONLY" });
+    expect(await db.prisma.transaction.count()).toBe(0);
+  });
+
   it("creates, reads, updates and deletes a category and transaction with string money", async () => {
     const category = await finance.createCategory(alice, { name: "Synthetic category", transactionType: "EXPENSE" });
     await finance.updateCategory(alice, category.id, { name: "Renamed", transactionType: "EXPENSE" });

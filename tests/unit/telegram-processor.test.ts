@@ -26,7 +26,7 @@ const stored = () => ({ id: pendingId, kind: "PROPOSAL", consumedAt: null, expir
 
 beforeEach(() => {
   vi.resetAllMocks();
-  mock.resolveTelegramUser.mockResolvedValue({ id: "synthetic-user" });
+  mock.resolveTelegramUser.mockResolvedValue({ id: "synthetic-user", connectionId: "synthetic-connection" });
   mock.answerCallbackQuery.mockResolvedValue(undefined);
   mock.sendMessage.mockResolvedValue(undefined);
   mock.approvePendingAction.mockResolvedValue(null);
@@ -36,6 +36,14 @@ beforeEach(() => {
 });
 
 describe("message delivery effect idempotency", () => {
+  it("suppresses a financial report if its Telegram connection changes before delivery", async () => {
+    mock.getTelegramReport.mockResolvedValue({ income: "99.00", expense: "0.00", net: "99.00" });
+    mock.resolveTelegramUser.mockResolvedValueOnce({ id: "synthetic-user", connectionId: "old" })
+      .mockResolvedValueOnce({ id: "synthetic-user", connectionId: "new" });
+    await processTelegramUpdate(message("/balance"));
+    expect(mock.getTelegramReport).toHaveBeenCalledOnce();
+    expect(mock.sendMessage).not.toHaveBeenCalled();
+  });
   it("does not replace an already consumed proposal when its original message retries", async () => {
     mock.getActionForUpdate.mockResolvedValue({ ...stored(), consumedAt: new Date() });
     await processTelegramUpdate(message());

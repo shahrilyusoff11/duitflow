@@ -98,21 +98,23 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
     await connect();
     expect((await deliver(message(100, "Makan RM12"))).status).toBe(200);
     expect(context.parse).not.toHaveBeenCalled();
-    expect(await db.prisma.rateLimitEvent.count()).toBe(0);
+    expect(await db.prisma.rateLimitEvent.count({ where: { bucket: "ai:parse" } })).toBe(0);
     expect((await telegram.getPendingAction(alice, sender))?.kind).toBe("PROPOSAL");
     expect(await db.prisma.transaction.count()).toBe(0);
   });
   it("creates a multi-row proposal, saves only on explicit approval, and reuses retries", async () => {
     await connect(); await setAiConsent(alice, true);
     const fixture = goldenCases.find((item) => item.name === "Mixed income and expense")!;
+    const text = "Gaji credited RM2500 from Testname kemudian paid RM15 for lunch";
     context.parse.mockResolvedValue(JSON.stringify(fixture.output));
-    expect((await deliver(message(200, fixture.message))).status).toBe(200);
+    expect((await deliver(message(200, text))).status).toBe(200);
     const pending = await telegram.getPendingAction(alice, sender);
     expect(pending?.kind).toBe("PROPOSAL");
     expect(await db.prisma.transaction.count()).toBe(0);
     const payload = context.parse.mock.calls[0][0];
-    expect(Object.keys(payload).sort()).toEqual(["categoryNames", "message", "today"]);
+    expect(Object.keys(payload).sort()).toEqual(["categoryNames", "message"]);
     expect(JSON.stringify(payload)).not.toContain(alice); expect(JSON.stringify(payload)).not.toContain(sender);
+    expect(payload.message).not.toMatch(/Testname|2500|RM15/);
     expect((await deliver(message(201, "ya"))).status).toBe(200);
     expect(await db.prisma.transaction.count()).toBe(0);
     expect((await deliver(callback(202, pending!.id))).status).toBe(200);
@@ -120,7 +122,7 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
     const rows = await db.prisma.transaction.findMany({ where: { userId: alice }, orderBy: { amount: "asc" } });
     expect(rows.map((row) => [row.amount.toFixed(2), row.type, row.source])).toEqual([["15.00", "EXPENSE", "TELEGRAM"], ["2500.00", "INCOME", "TELEGRAM"]]);
     expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("Disimpan:"), undefined);
-    expect((await deliver(message(200, fixture.message))).status).toBe(200);
+    expect((await deliver(message(200, text))).status).toBe(200);
     expect(context.parse).toHaveBeenCalledTimes(1);
     expect(await db.prisma.pendingTelegramAction.count()).toBe(1);
     expect(await db.prisma.transaction.count({ where: { userId: bob } })).toBe(0);
@@ -128,18 +130,20 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
   it("withdrawal and missing credentials prevent future API calls", async () => {
     await connect(); await setAiConsent(alice, true);
     vi.stubEnv("DEEPSEEK_API_KEY", "");
-    await deliver(message(300, "Makan RM12"));
+    await deliver(message(300, "Paid RM12 for lunch"));
     vi.stubEnv("DEEPSEEK_API_KEY", environment.DEEPSEEK_API_KEY);
     await setAiConsent(alice, false);
-    await deliver(message(301, "Makan RM14"));
-    expect(context.parse).not.toHaveBeenCalled(); expect(await db.prisma.rateLimitEvent.count()).toBe(0);
+    await deliver(message(301, "Paid RM14 for lunch"));
+    expect(context.parse).not.toHaveBeenCalled();
+    expect(await db.prisma.rateLimitEvent.count({ where: { bucket: "ai:parse" } })).toBe(0);
   });
   it("falls back on a provider failure and never stores bad AI output", async () => {
     await connect(); await setAiConsent(alice, true);
     context.parse.mockRejectedValueOnce(new Error("synthetic-sensitive-error"));
-    expect((await deliver(message(400, "Makan RM12"))).status).toBe(200);
+    expect((await deliver(message(400, "Buku RM12"))).status).toBe(200);
     context.parse.mockResolvedValueOnce(JSON.stringify({ intent: "save_now", userId: bob, amount: "9999" }));
-    expect((await deliver(message(401, "Tell me something?"))).status).toBe(200);
+    expect((await deliver(message(401, "Paid RM12 for lunch"))).status).toBe(200);
+    expect(context.parse).toHaveBeenCalledTimes(2);
     expect(await db.prisma.transaction.count()).toBe(0);
     expect(await db.prisma.pendingTelegramAction.count()).toBe(1);
     expect(JSON.stringify(vi.mocked(sendMessage).mock.calls)).not.toContain("synthetic-sensitive-error");
@@ -157,17 +161,17 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
       await telegram.unlinkTelegram(alice);
       return JSON.stringify(goldenCases[0].output);
     });
-    expect((await deliver(message(600, goldenCases[0].message))).status).toBe(200);
+    expect((await deliver(message(600, "Paid RM12 for lunch"))).status).toBe(200);
+    expect(context.parse).toHaveBeenCalledTimes(1);
     expect(await db.prisma.pendingTelegramAction.count()).toBe(0);
     expect(await db.prisma.transaction.count()).toBe(0);
   });
   it("routes a natural query through fixed DB operations and never sends DB results back to the model", async () => {
     await connect(); await setAiConsent(alice, true);
     await db.prisma.transaction.create({ data: { userId: alice, categoryId: food, type: "EXPENSE", amount: "12.50", description: "Synthetic", occurredOn: new Date("2026-11-01Z"), source: "WEB" } });
-    context.parse.mockResolvedValue(JSON.stringify({ intent: "query", transactions: [], requiresConfirmation: false, uncertainty: [], query: { operation: "spend_by_category", period: "2026-11", categoryName: "makan" } }));
     expect((await deliver(message(700, "Berapa belanja makan 2026-11?"))).status).toBe(200);
     expect(sendMessage).toHaveBeenLastCalledWith(sender, "2026-11 · Makanan & Minuman: RM 12.50", undefined);
-    expect(context.parse).toHaveBeenCalledTimes(1);
+    expect(context.parse).not.toHaveBeenCalled();
     expect(await db.prisma.pendingTelegramAction.count()).toBe(0);
   });
 });

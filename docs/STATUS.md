@@ -6,7 +6,49 @@ webhook checks pass. On 15 November 2026 the owner separately confirmed all
 requested real OAuth, synthetic web CRUD, Telegram link/approval and replay
 smoke checks. Approved real auth and synthetic finance/bot writes occurred;
 no schema migration, new application dependency or paid service was introduced in Phase 5.
-The hosted release offers DeepSeek Flash with per-user opt-in. Stretch is unstarted.
+The hosted release offers DeepSeek Flash with per-user opt-in.
+
+## Telegram and DeepSeek privacy hardening — 18 November 2026
+
+- [x] Optional DeepSeek requests use validated app-owned words and generic
+  categories. The backend handles amounts, dates, descriptions, custom category
+  names, and supported financial questions locally.
+- [x] New links require a code from the Telegram chat and confirmation in
+  signed-in Settings. Finance reads lock the connection and sensitive replies
+  recheck the same connection immediately before sending.
+- [x] PostgreSQL limits new messages, approvals, and link attempts per sender and
+  project. Terminal actions clear their payloads and retain replay receipts.
+  Bounded cleanup ages out abandoned update metadata.
+- [x] Telegram transport bypasses Next.js fetch tracing and uses bounded HTTPS
+  responses. Settings provides links to the provider terms and caching policy.
+- [x] Schema validation, lint, typecheck, 338 unit/integration tests, production
+  build, and 34 desktop/mobile Chromium tests passed using disposable storage and
+  synthetic data. The migration test covered active and terminal legacy rows.
+- [ ] Apply `20261118000002_telegram_privacy` on the intended release database,
+  deploy the updated app, and verify live Telegram behavior and hosted telemetry
+  redaction with synthetic traffic. No production changes or live provider
+  requests were made for this hardening.
+
+## Recurring bills — 18 November 2026
+
+- [x] Owner approved recurring bills, the 30-day dashboard forecast and manual
+  recording of payments.
+- [x] Implemented monthly and yearly schedules, editing and pausing, plus a
+  prefilled expense form. Confirmation advances the bill and records the expense
+  atomically. The existing transaction ledger continues to track actual spending.
+- [x] Lint, typecheck, Prisma validation and the production build passed. All 323
+  unit/integration and 32 desktop/mobile browser tests passed with disposable
+  PostgreSQL. Verified month-end projection, account isolation, duplicate payment
+  protection, dashboard layout and the payment confirmation flow.
+- [x] Applied `20261118000001_recurring_bills` on the configured Neon branch.
+  Prisma reported the schema up to date, and the pooled connection sees the new
+  table. Restarted the localhost development server and verified DB readiness.
+- [x] Fixed development hot reload reusing a Prisma client created before the
+  new model was generated. The client cache now checks the generated constructor
+  in development. The regression verifies the bill delegate after replacement.
+  Lint, typecheck, production build, 324 unit/integration tests and 32 browser
+  tests passed after the fix. The restarted localhost passed `verify:app`.
+- [ ] Deploy the recurring-bills app release to Vercel.
 
 ## DeepSeek Flash provider change — 18 November 2026
 

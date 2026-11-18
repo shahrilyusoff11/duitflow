@@ -37,30 +37,31 @@ persists independently of availability and can be withdrawn from Settings.
 
 ## Runtime boundaries and limits
 
-- Only new linked-user private-chat messages enter AI, with live connection and
-  consent checked under the same user lock used by unlink and approval.
-- Provider payload contains only message text, today's Malaysian date and
-  category names. Profile names, emails, tokens, IDs, stored history, financial
-  totals and query results are never added. Text/category names are untrusted
-  data, so users must keep them free of personal information.
-- Strict bounded Zod schemas reject extra keys, unknown intents/operations,
-  non-string money, tool calls, partial responses and malformed/oversized output.
-  Money must be a complete original substring, parsed locally with Decimal;
-  dates resolve on the server. Missing/ambiguous money, category or date asks a
-  clarification. Ten proposed transactions maximum; only explicit Sahkan can
-  save them through the existing atomic owner-scoped approval transaction.
-- Read-only operations: net_for_period, spend_by_category, top_categories,
-  budget_status and recent_transactions. Server category matching supports
-  exact names, a small alias map and unique one-character typos for longer names.
-  Unclear category queries ask the user to resend an exact name. SQL and financial
-  response prose never come from the model; all answers render stored DB results.
+- The local parser handles complete proposals and known amount or date
+  clarifications first. The bot recognizes supported financial questions locally
+  and renders owner-scoped database results. Unclear requests can use
+  `/balance`, `/report` or `/budget`.
+- Optional category suggestions use a projection of new linked-user messages.
+  DeepSeek sees numbered clauses, locally assigned direction, allowlisted
+  bookkeeping words, and the app's static generic category names. Raw text,
+  custom names, amounts, dates, user IDs, prior requests and query results stay
+  with the application. Common credential, contact and bank patterns bypass AI.
+  The projection still reveals the coarse context of the entry. DeepSeek
+  documents [default API disk caching](https://api-docs.deepseek.com/guides/kv_cache/).
+- Strict bounded Zod schemas reject extra keys, unknown intents, tool calls,
+  partial responses and malformed or oversized output. Each model item must
+  match a unique local clause and direction. Only a generic category suggestion
+  is applied, and only when it matches an owned category of that type. The
+  server reads the amount, date and description from the local clause. Missing
+  or ambiguous fields trigger clarification. Only explicit Sahkan saves rows
+  through the atomic owner-scoped approval transaction.
 - Postgres rate events and an advisory transaction lock enforce at most 2 calls
   per rolling minute and 30 per rolling 24 hours per user (configurable downward),
   plus 4/minute and 30/24 hours across the application project. These are local
   safety caps. Attempts reserve capacity before network
   dispatch, including failed calls. No Redis or process-local limit fallback.
-- Network + body-read + parse deadline: five seconds; 32 KB HTTP envelope,
-  20 KB model text, 4,000-character input, 100 category names, 4,096 output tokens.
+- The network, body read and parsing deadline is five seconds. Bounds include a
+  32 KB HTTP envelope, 20 KB model text, 4,000 input characters and 4,096 output tokens.
   One direct request per attempt, with tools and app-side caching disabled.
   Missing key, opt-out, cap, DB permission failure, timeout, upstream
   error or invalid output falls back to the deterministic parser. Unsupported
@@ -69,13 +70,14 @@ persists independently of availability and can be withdrawn from Settings.
   before HTTP success within its existing 30-second route. after() only cleans
   up. It does not own the AI work; a killed worker remains retryable via 503 and
   lease expiry. Persisted proposals reuse stable update UUIDs. Retried queries
-  may be parsed/replied again within quota; they cannot write transactions.
+  may be answered again from stored results.
 - Consent withdrawal blocks subsequent dispatch permission checks. A request
   already sent cannot be recalled. Unlink prevents a later proposal/write/query
   because every scoped DAL operation rechecks the live connection.
 
-Use synthetic, non-sensitive messages and category names for the portfolio
-experiment. The Settings notice names the provider and explains what is sent.
+Use synthetic messages when verifying the deployment. The Settings notice names
+the provider and explains what is sent. Review the provider's applicable
+retention and processing terms before approving wider real-data use.
 [DeepSeek Open Platform terms](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html)
 
 ## Verification and rotation
@@ -88,7 +90,7 @@ expenses in a schema-valid response within the five-second deadline. See the
 status log for deployment and signed-in Telegram verification.
 
 Use only synthetic messages for a live smoke check
-(e.g. breakfast RM8 and petrol RM40), review all proposed values, cancel or
+(e.g. `Paid RM8 for breakfast then paid RM40 for petrol`). Review all proposed values, cancel or
 explicitly confirm once, then verify no duplicate on re-tap. Check opt-out and
 no-key fallback too. Do not use real financial records for this check.
 

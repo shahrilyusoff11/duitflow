@@ -69,13 +69,11 @@ require approval. Follow [the deployment runbook](DEPLOYMENT.md) before live set
 ## Link, use and unlink
 
 Sign in through GitHub, open **Tetapan** and choose **Jana pautan Telegram**.
-Open the generated link and press Telegram's **Start** button. Refresh Settings
-to see the connection status. The payload uses URL-safe random bytes, stays
-within Telegram's [deep-link limit](https://core.telegram.org/bots/features#deep-linking),
-expires after ten minutes and can be redeemed once. The database stores only
-its hash. A fresh link invalidates older links. Treat the generated link as a
-short-lived credential and do not share it. It is not retained in page URLs or
-local storage and disappears from the UI after a reload.
+Open the link, press Telegram's **Start** button, and enter the bot's code in
+signed-in **Tetapan** to activate the connection. Only use the code from your own
+bot chat. The link expires after ten minutes and a new link invalidates it.
+DuitFlow stores the link hash and the Telegram identity awaiting confirmation.
+The code is derived on the server and can only activate the pending link once.
 
 A Telegram identity cannot attach to two web accounts, and a connected web
 account cannot silently switch identities. Unlink first when changing the
@@ -86,7 +84,7 @@ commands require a live connection. Supported commands are:
 
 | Command | Result |
 | --- | --- |
-| `/start`, `/link` | Link instructions, or redeem the token supplied by Settings |
+| `/start`, `/link` | Link instructions, or return the confirmation code for a valid Settings link |
 | `/help` | Supported formats and commands |
 | `/balance` | Current Malaysian month's recorded income, expense and net |
 | `/budget` | Current month's limits, spending and remaining amounts |
@@ -115,7 +113,8 @@ buttons no longer authorize writes, even if that identity reconnects later.
 
 After owner setup, use synthetic records for these checks:
 
-- Sign in, link once, and verify replay/expired link rejection.
+- Sign in, open a link, verify that finance commands are denied until the bot
+  code is entered in Settings, then check that replay/expired codes are rejected.
 - Run `/balance`, `/budget` and `/report`; compare with the same web month.
 - Send `Makan RM12`; verify no finance write before **Sahkan**, then confirm and
   check exactly one `TELEGRAM` transaction on the web. Tap again and verify no
@@ -142,9 +141,11 @@ Messages and bot replies pass through Telegram; bot chats are not a place for
 bank passwords, authentication secrets or banking credentials. No messages are
 sent to an AI service without Phase 4 provider configuration and explicit user
 consent. See [AI setup and privacy](AI_SETUP.md) before enabling the optional
-parser. Application logs must not contain raw messages,
-link tokens, webhook secrets or bot tokens. The database holds only the
-validated data needed by pending actions and financial records.
+parser. Application logs must not contain raw messages, link credentials,
+webhook secrets or bot tokens. Telegram requests use Node HTTPS to bypass
+Next.js fetch tracing. Before a production rollout, use synthetic data to
+check enabled runtime logs and traces for token-bearing URL paths, authorization
+headers and request or response bodies. Check exports as well as the hosting UI.
 
 Telegram's free platform still has [API limits](https://core.telegram.org/bots/faq#my-bot-is-hitting-limits-how-do-i-avoid-this).
 Neon autosuspend and hosting cold starts may delay replies. Free hosting and
@@ -171,8 +172,14 @@ duplicate financial writes. A callback-acknowledgment failure cannot mask a
 prior retryable processing error. Explicit permanent request/chat rejections
 stop retries; uncertain network/configuration/upstream failures remain retryable.
 
-Lazy cleanup after successful processing deletes at most 100 records per table:
-DONE updates older than seven days, pending actions expired over seven days ago,
-and link tokens expired over one day ago. Consumed action receipts remain long
-enough to reject replay without replacing an already saved proposal. Failed and
-processing update records are retained for retry. No cron or paid queue is used.
+New authenticated traffic is limited per rolling minute. Message and callback
+buckets each allow 12 updates per sender and 120 project-wide. Link attempts
+allow 5 per sender and 60 project-wide. Already admitted updates retain their
+retry behavior. Excess fresh updates are acknowledged without processing.
+
+Approval, cancellation, replacement and unlink clear proposal contents in the
+same database transaction. Bounded cleanup removes contents of expired actions,
+retains replay identifiers until seven days after expiry, and clears update
+metadata after seven days, including abandoned attempts. It also clears link
+tokens one day after expiry and old Telegram throttle events. Cleanup runs
+after successful processing and may lag on an idle bot.

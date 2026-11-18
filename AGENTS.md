@@ -26,7 +26,8 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
   owner confirmed real production OAuth, web CRUD, Telegram linking/approval,
   replay protection and sign-out/re-login. Do not request the same setup approval
   again. Phase 5 shipped with deterministic parsing.
-  Stop before Stretch features. See docs/DEPLOYMENT.md for the release workflow.
+  The owner approved the recurring bills feature after Phase 5. Keep the other
+  Stretch features gated. See docs/DEPLOYMENT.md for the release workflow.
   The checkout is linked to Vercel Hobby `sy-74fc/duitflow`; the public origin is
   https://duitflow-lyart.vercel.app. See docs/VERCEL_SETUP.md and docs/STATUS.md for
   exact release evidence. Preserve Production-only secret scopes and `.vercelignore`.

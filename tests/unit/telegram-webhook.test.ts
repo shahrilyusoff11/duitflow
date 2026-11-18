@@ -81,11 +81,11 @@ describe("Telegram webhook boundary", () => {
     expect(mock.process).not.toHaveBeenCalled();
     expect(mock.send).not.toHaveBeenCalled();
   });
-  it("answers ignored nonprivate/inline callbacks without finance access", async () => {
+  it("ignores nonprivate and inline callbacks without outbound work", async () => {
     for (const chat of [{ id: -1, type: "group" }, undefined]) {
       await POST(request({ update_id: 11, callback_query: { id: "synthetic-callback", from: { id: 12345, is_bot: false }, data: "c:bad", ...(chat ? { message: { message_id: 1, chat } } : {}) } }));
     }
-    expect(mock.answer).toHaveBeenCalledTimes(2);
+    expect(mock.answer).not.toHaveBeenCalled();
     expect(mock.process).not.toHaveBeenCalled();
   });
   it("ignores mismatched private chat identity and bot senders", async () => {

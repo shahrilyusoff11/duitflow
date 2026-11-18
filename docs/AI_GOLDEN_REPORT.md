@@ -1,12 +1,12 @@
-# Mocked AI golden-set report — 15 November 2026
+# Mocked AI golden-set report
 
 **45/45 passed (100%).** Fixtures: tests/fixtures/ai-golden.ts.
 Command: `npx vitest run tests/unit/ai-parser.test.ts`.
 
-These are synthetic Malay/English messages with hand-authored mocked provider
-responses. They exercise the production provider selection, permission check,
-strict parsing, normalization and fallback boundary. Live extraction accuracy
-remains unverified.
+These synthetic Malay/English cases cover local parsing, local financial
+questions and hand-authored provider responses for optional category suggestions.
+The fixtures exercise provider selection, scoped permission checks, strict
+output validation and fallback. Live category accuracy remains unverified.
 
 | Coverage | Cases |
 | --- | ---: |

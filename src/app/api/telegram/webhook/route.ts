@@ -4,7 +4,7 @@ import { getTelegramConfig, isTelegramConfigured } from "@/lib/config/telegram";
 import { telegramUpdateSchema, isPrivateTelegramUpdate } from "@/lib/telegram/update";
 import { claimTelegramUpdate, cleanupTelegramState, finishTelegramUpdate } from "@/lib/telegram/state";
 import { processTelegramUpdate } from "@/lib/telegram/processor";
-import { answerCallbackQuery, TelegramTransportError } from "@/lib/telegram/transport";
+import { TelegramTransportError } from "@/lib/telegram/transport";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -47,15 +47,13 @@ export async function POST(request: Request): Promise<Response> {
   const parsed = telegramUpdateSchema.safeParse(raw);
   if (!parsed.success) return ok();
   const update = parsed.data;
-  if (!isPrivateTelegramUpdate(update)) {
-    if (update.callback_query) {
-      try { await answerCallbackQuery(update.callback_query.id, "Gunakan sembang peribadi dengan bot."); } catch { /* Ignored update, never expose data. */ }
-    }
-    return ok();
-  }
+  if (!isPrivateTelegramUpdate(update)) return ok();
+  const sender = update.callback_query?.from ?? update.message?.from;
+  if (!sender) return ok();
+  const kind = update.callback_query ? "callback" : /^\/start(?:@\w+)?\s+/i.test(update.message?.text?.trim() ?? "") ? "link" : "message";
   let lease: Awaited<ReturnType<typeof claimTelegramUpdate>> = null;
   try {
-    lease = await claimTelegramUpdate(update.update_id);
+    lease = await claimTelegramUpdate(update.update_id, new Date(), { sender: String(sender.id), kind, secret: webhookSecret });
     if (!lease) return ok();
     // Deterministic intake plus optional AI has a five-second AI deadline. Keep
     // HTTP delivery retryable until processing succeeds; an early200 loses work

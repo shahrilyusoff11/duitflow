@@ -1,8 +1,9 @@
 import { parseDate, resolveRelativeDate } from "@/lib/finance/dates";
-import { parseMoney } from "@/lib/finance/money";
+import { defaultCategories } from "@/lib/finance/default-categories";
 import { finishParse, type ParseResult, type TelegramCategory } from "@/lib/telegram/parser";
 import type { PartialTransaction } from "@/lib/telegram/schemas";
 import { parseAiOutput, type FinanceQuery } from "./schemas";
+import type { SourceItem } from "./input";
 
 const normalize = (value: string) => value.toLocaleLowerCase("ms-MY").normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 const aliases: Record<string, string> = { makan: "Makanan & Minuman", makanan: "Makanan & Minuman", food: "Makanan & Minuman", transport: "Pengangkutan", petrol: "Pengangkutan", salary: "Gaji" };
@@ -39,46 +40,21 @@ export function resolveAiDate(expression: string, now: Date) {
 
 export type AiInterpretation = ParseResult | { kind: "QUERY"; query: FinanceQuery };
 
-function sourceAmounts(message: string) {
-  // Tokenize the entire money phrase, so "50" cannot be lifted from "50 sen",
-  // nor "12 ringgit" from "12 ringgit 50 sen". Mask dates before tokenization.
-  const source = message.toLowerCase().replace(/\b\d{4}-\d{2}-\d{2}\b/g, (value) => " ".repeat(value.length));
-  const tokens = source.matchAll(/(?<![\p{L}\p{N}.,])(?:[+\-−‐-―﹣－➖]\s*)?(?:rm\s*)?(?:[+\-−‐-―﹣－➖]\s*)?\d[\d.,]*(?:k|\s+ringgit(?:\s+\d[\d.,]*\s+sen)?|\s+sen)?(?![\p{L}\p{N}.,])/gu);
-  return new Set([...tokens].filter((token) => !/^\s+\d/.test(source.slice(token.index + token[0].length)) && !/\d\s+$/.test(source.slice(0, token.index))).map((token) => token[0].trim().replace(/[.,]+$/, "")));
-}
-
-export function interpretAiOutput(raw: string, message: string, categories: TelegramCategory[], now: Date): AiInterpretation {
+export function interpretAiOutput(raw: string, items: SourceItem[], categories: TelegramCategory[], now: Date): ParseResult {
   const output = parseAiOutput(raw);
-  if (output.intent === "unsupported" || output.uncertainty.includes("intent")) throw new Error("UNSUPPORTED_AI_INPUT");
-  if (output.intent === "query") {
-    if (output.uncertainty.length) throw new Error("AMBIGUOUS_AI_QUERY");
-    const query = output.query!;
-    if ("period" in query) {
-      if (/^\d/.test(query.period) && !message.includes(query.period)) throw new Error("UNGROUNDED_PERIOD");
-      if (query.period === "last_month" && !/\b(bulan (?:lepas|lalu)|last month)\b/i.test(message)) throw new Error("UNGROUNDED_PERIOD");
-      if (query.period === "this_month" && /\b(bulan (?:lepas|lalu)|last month|\d{4}-\d{2})\b/i.test(message)) throw new Error("AMBIGUOUS_PERIOD");
-    }
-    return { kind: "QUERY", query: output.query! };
-  }
-  const moneyLiterals = sourceAmounts(message);
-  const transactions: PartialTransaction[] = output.transactions.map((item) => {
-    let amount: string | undefined;
-    if (item.amount !== null && !output.uncertainty.includes("amount")) {
-      // Require a complete source substring. A fabricated/rounded model amount
-      // cannot normalize ambiguous user input into a valid financial value.
-      if (!moneyLiterals.has(item.amount.trim().toLowerCase())) throw new Error("UNGROUNDED_AMOUNT");
-      try { amount = parseMoney(item.amount).toFixed(2); } catch { /* clarify */ }
-    }
+  if (output.intent === "unsupported" || output.transactions.length !== items.length) throw new Error("UNSUPPORTED_AI_INPUT");
+  const byIndex = new Map(output.transactions.map((item) => [item.sourceIndex, item]));
+  const transactions: PartialTransaction[] = items.map((source, index) => {
+    const item = byIndex.get(index + 1);
+    if (!item || item.type !== source.type) throw new Error("UNGROUNDED_TRANSACTION");
     let occurredOn: string | undefined;
-    if (item.dateExpression && !output.uncertainty.includes("date")) {
-      if (item.dateExpression !== "today" && !message.toLowerCase().includes(item.dateExpression.toLowerCase())) throw new Error("UNGROUNDED_DATE");
-      // If a model silently discards a stated date, ask rather than default today.
-      if (item.dateExpression !== "today" || !/\b(semalam|yesterday|kelmarin|minggu lepas|last week|esok|tomorrow|minggu depan|bulan lepas|last month|\d{4}-\d{2}-\d{2})\b/i.test(message)) {
-        try { occurredOn = resolveAiDate(item.dateExpression, now); } catch { /* clarify */ }
-      }
+    if (source.dateExpression) {
+      try { occurredOn = resolveAiDate(source.dateExpression, now); } catch { /* Clarify. */ }
     }
-    const category = item.categoryName && !output.uncertainty.includes("category") ? matchCategory(item.categoryName, categories, item.type) : undefined;
-    return { type: item.type, description: item.description, ...(amount ? { amount } : {}), ...(occurredOn ? { occurredOn } : {}), ...(category ? { categoryId: category.id } : {}) };
+    const category = defaultCategories.some((entry) => entry.transactionType === source.type && entry.name === item.categoryName)
+      ? categories.find((entry) => entry.transactionType === source.type && entry.name === item.categoryName)
+      : undefined;
+    return { type: source.type, description: source.description, amount: source.amount, occurredOn, categoryId: category?.id };
   });
   return finishParse(transactions);
 }

@@ -1,5 +1,19 @@
 # Decisions
 
+## 2026-11-18 — Recurring bills
+
+Add monthly and yearly expense schedules in `/bills`. The dashboard uses the
+Malaysian calendar date and shows all active occurrences in the 30-day window
+starting today. Overdue schedules remain in the management list, so an old due
+date can still be recorded when paid. Monthly and annual schedules preserve the
+chosen day when a shorter month temporarily shifts it to the last day.
+
+Only confirming the prefilled payment form saves a transaction. A version check
+claims the outstanding occurrence and advances the schedule in the same database
+transaction that records the expense. Changes to the schedule, including deletion,
+leave saved transactions in the ledger. To reopen a due date after correcting a
+payment in the ledger, adjust the schedule from `/bills`.
+
 ## 2026-11-18 — Frontend redesign
 
 The landing page, public demo and signed-in dashboard share a server-rendered
@@ -478,3 +492,13 @@ Consent names the data recipient, so DeepSeek uses a new flag that defaults off
 for every account. Retain the legacy column for compatibility with the previous
 release. Deploy the additive migration before the updated app. Settings consent
 and the Telegram dispatch check both use the new flag.
+
+## 2026-11-18 — Telegram privacy hardening
+
+The backend handles money, dates, descriptions and supported financial
+questions locally. DeepSeek can suggest generic categories using numbered
+clauses containing app-owned vocabulary. The adapter validates that projection
+before network I/O. The bot requires web confirmation for new links, locks the
+connection during scoped reads and checks its identity before sensitive replies.
+Postgres throttles new messages, link attempts and callbacks independently.
+Terminal action rows retain their replay identity while dropping their payload.

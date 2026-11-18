@@ -4,14 +4,20 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 let database: PGlite;
+const migrationRoot = join(process.cwd(), "prisma", "migrations");
+const telegramPrivacyMigration = "20261118000002_telegram_privacy";
+
+async function applyMigrations(target: PGlite, before?: string) {
+  const directories = await readdir(migrationRoot, { withFileTypes: true });
+  for (const directory of directories.filter((entry) => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (directory.name === before) break;
+    await target.exec(await readFile(join(migrationRoot, directory.name, "migration.sql"), "utf8"));
+  }
+}
 
 beforeAll(async () => {
   database = await PGlite.create();
-  const root = join(process.cwd(), "prisma", "migrations");
-  const directories = await readdir(root, { withFileTypes: true });
-  for (const directory of directories.filter((entry) => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))) {
-    await database.exec(await readFile(join(root, directory.name, "migration.sql"), "utf8"));
-  }
+  await applyMigrations(database);
 });
 
 beforeEach(async () => {
@@ -44,6 +50,24 @@ function insertBudget(categoryId: string, type: string, month = 11) {
 }
 
 describe("reviewed PostgreSQL migrations", () => {
+  it("clears legacy terminal payloads while preserving active proposals and replay rows", async () => {
+    const upgrade = await PGlite.create();
+    try {
+      await applyMigrations(upgrade, telegramPrivacyMigration);
+      await upgrade.exec(`
+        INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES
+          ('active', 'Active Test', 'active@example.test', now()),
+          ('expired', 'Expired Test', 'expired@example.test', now());
+        INSERT INTO "PendingTelegramAction" ("id", "userId", "telegramUserId", "kind", "payload", "expiresAt", "consumedAt") VALUES
+          ('00000000-0000-4000-8000-000000000001', 'active', '123456', 'PROPOSAL', '{"amount":"12"}', now() + interval '10 minutes', NULL),
+          ('00000000-0000-4000-8000-000000000002', 'active', '123456', 'PROPOSAL', '{"amount":"20"}', now() + interval '10 minutes', now()),
+          ('00000000-0000-4000-8000-000000000003', 'expired', '234567', 'CLARIFICATION', '{"description":"Synthetic"}', now() - interval '1 minute', NULL);
+      `);
+      await upgrade.exec(await readFile(join(migrationRoot, telegramPrivacyMigration, "migration.sql"), "utf8"));
+      const result = await upgrade.query('SELECT "payload" FROM "PendingTelegramAction" ORDER BY "id"');
+      expect(result.rows).toEqual([{ payload: { amount: "12" } }, { payload: null }, { payload: null }]);
+    } finally { await upgrade.close(); }
+  });
   it("defaults AI consent off", async () => {
     const result = await database.query<{ deepseekParsingEnabled: boolean }>('SELECT "deepseekParsingEnabled" FROM "User" WHERE "id" = $1', ["alice"]);
     expect(result.rows[0].deepseekParsingEnabled).toBe(false);

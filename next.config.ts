@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  logging: { serverFunctions: false },
   async headers() {
     return [
       {
@@ -13,7 +14,7 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
       },
-      ...["dashboard", "transactions", "categories", "budgets", "settings", "sign-in", "api"].map((path) => ({
+      ...["dashboard", "transactions", "categories", "budgets", "bills", "settings", "sign-in", "api"].map((path) => ({
         source: `/${path}/:path*`,
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       })),

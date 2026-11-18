@@ -1,9 +1,10 @@
 import "server-only";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { Prisma } from "@/generated/prisma/client";
 import { requireUser, AccessError } from "@/lib/auth/session";
 import { getDatabase } from "@/lib/db";
+import { getTelegramConfig } from "@/lib/config/telegram";
 import { monthRange, parseDate, shiftMonth, todayInMalaysia } from "@/lib/finance/dates";
 import { Decimal } from "@/lib/finance/money";
 import { idSchema, monthSchema } from "@/lib/finance/validation";
@@ -33,8 +34,13 @@ async function lockUser(tx: Tx, userId: string) {
 async function authorizeTelegram(tx: Tx, userId: string, sender: string) {
   telegramId.parse(sender);
   const user = await lockUser(tx, userId);
-  const connection = await tx.telegramConnection.findFirst({ where: { userId, telegramUserId: sender }, select: { id: true } });
-  if (!user || user.isDemo || !connection) throw new TelegramAccessError();
+  if (!user || user.isDemo) throw new TelegramAccessError();
+  // Lock the connection itself. A repeatable-read snapshot that still sees a
+  // connection deleted by unlink must fail the lock instead of authorizing.
+  const [connection] = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id" FROM "TelegramConnection"
+    WHERE "userId" = ${userId} AND "telegramUserId" = ${sender} FOR UPDATE`;
+  if (!connection) throw new TelegramAccessError();
 }
 
 async function authorizeBrowser(userId: string) {
@@ -56,7 +62,7 @@ export async function createLinkToken(userId: string) {
     const user = await lockUser(tx, userId);
     if (!user || user.isDemo) throw new AccessError("FORBIDDEN");
     if (await tx.telegramConnection.findUnique({ where: { userId }, select: { id: true } })) throw new AccessError("FORBIDDEN");
-    await tx.telegramLinkToken.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date() } });
+    await tx.telegramLinkToken.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date(), pendingTelegramUserId: null } });
     await tx.telegramLinkToken.create({ data: { userId, hashedToken: hashToken(token), expiresAt } });
   });
   // The raw bearer token is returned once, never stored, logged or put in a URL
@@ -66,27 +72,45 @@ export async function createLinkToken(userId: string) {
 
 function hashToken(token: string) { return createHash("sha256").update(token).digest("hex"); }
 
-export async function redeemLinkToken(token: string, sender: string): Promise<"LINKED" | "INVALID" | "CONFLICT"> {
+function linkCode(hash: string, sender: string) {
+  const { webhookSecret } = getTelegramConfig(process.env);
+  return createHmac("sha256", webhookSecret).update(`telegram-link-confirmation:${hash}:${sender}`).digest().subarray(0, 12).toString("base64url");
+}
+
+export async function redeemLinkToken(token: string, sender: string): Promise<{ code: string } | "INVALID" | "CONFLICT"> {
   if (!linkToken.safeParse(token).success || !telegramId.safeParse(sender).success) return "INVALID";
+  const hashedToken = hashToken(token);
+  return getDatabase().$transaction(async (tx) => {
+    const owner = await tx.telegramLinkToken.findUnique({ where: { hashedToken }, select: { userId: true } });
+    if (!owner) return "INVALID";
+    const user = await lockUser(tx, owner.userId);
+    const row = await tx.telegramLinkToken.findUnique({ where: { hashedToken } });
+    const now = new Date();
+    if (!user || user.isDemo || !row || row.consumedAt || row.expiresAt <= now) return "INVALID";
+    const existing = await tx.telegramConnection.findFirst({ where: { OR: [{ userId: row.userId }, { telegramUserId: sender }] }, select: { id: true } });
+    if (existing || (row.pendingTelegramUserId && row.pendingTelegramUserId !== sender)) return "CONFLICT";
+    if (!row.pendingTelegramUserId) await tx.telegramLinkToken.update({ where: { id: row.id }, data: { pendingTelegramUserId: sender } });
+    return { code: linkCode(hashedToken, sender) };
+  });
+}
+
+export async function confirmTelegramLink(userId: string, input: unknown): Promise<boolean> {
+  await authorizeBrowser(userId);
+  const code = z.string().trim().regex(/^[A-Za-z0-9_-]{16}$/).parse(input);
   try {
     return await getDatabase().$transaction(async (tx) => {
-      // Serialize competing accounts redeeming tokens for the same identity.
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`telegram:${sender}`}))`;
-      const row = await tx.telegramLinkToken.findUnique({ where: { hashedToken: hashToken(token) } });
-      if (!row) return "INVALID";
-      const user = await lockUser(tx, row.userId);
+      const user = await lockUser(tx, userId);
       const now = new Date();
-      if (!user || user.isDemo || row.consumedAt || row.expiresAt <= now) return "INVALID";
-      const existing = await tx.telegramConnection.findFirst({ where: { OR: [{ userId: row.userId }, { telegramUserId: sender }] }, select: { id: true } });
-      if (existing) return "CONFLICT";
-      const claimed = await tx.telegramLinkToken.updateMany({ where: { id: row.id, userId: row.userId, consumedAt: null, expiresAt: { gt: now } }, data: { consumedAt: now } });
-      if (claimed.count !== 1) return "INVALID";
-      await tx.telegramConnection.create({ data: { userId: row.userId, telegramUserId: sender } });
-      await tx.telegramLinkToken.updateMany({ where: { userId: row.userId, consumedAt: null }, data: { consumedAt: now } });
-      return "LINKED";
+      if (!user || user.isDemo) return false;
+      const row = await tx.telegramLinkToken.findFirst({ where: { userId, consumedAt: null, expiresAt: { gt: now }, pendingTelegramUserId: { not: null } } });
+      const sender = row?.pendingTelegramUserId;
+      if (!row || !sender || !timingSafeEqual(Buffer.from(code), Buffer.from(linkCode(row.hashedToken, sender)))) return false;
+      await tx.telegramConnection.create({ data: { userId, telegramUserId: sender } });
+      await tx.telegramLinkToken.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: now, pendingTelegramUserId: null } });
+      return true;
     });
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return "CONFLICT";
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return false;
     throw error;
   }
 }
@@ -95,8 +119,8 @@ export async function unlinkTelegram(userId: string) {
   await authorizeBrowser(userId);
   await getDatabase().$transaction(async (tx) => {
     if (!await lockUser(tx, userId)) throw new AccessError("UNAUTHENTICATED");
-    await tx.pendingTelegramAction.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date() } });
-    await tx.telegramLinkToken.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date() } });
+    await tx.pendingTelegramAction.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date(), payload: Prisma.JsonNull } });
+    await tx.telegramLinkToken.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: new Date(), pendingTelegramUserId: null } });
     await tx.telegramConnection.deleteMany({ where: { userId } });
   });
 }
@@ -105,8 +129,8 @@ export async function unlinkTelegram(userId: string) {
 // secret-authenticated private Telegram update, never from a browser form.
 export async function resolveTelegramUser(sender: string) {
   telegramId.parse(sender);
-  const connection = await getDatabase().telegramConnection.findUnique({ where: { telegramUserId: sender }, select: { userId: true, user: { select: { isDemo: true } } } });
-  return connection && !connection.user.isDemo ? { id: connection.userId } : null;
+  const connection = await getDatabase().telegramConnection.findUnique({ where: { telegramUserId: sender }, select: { id: true, userId: true, user: { select: { isDemo: true } } } });
+  return connection && !connection.user.isDemo ? { id: connection.userId, connectionId: connection.id } : null;
 }
 
 export async function getTelegramCategories(userId: string, sender: string) {
@@ -225,7 +249,7 @@ export async function replacePendingAction(userId: string, sender: string, kind:
       if (existing) return existing;
     }
     const now = new Date();
-    await tx.pendingTelegramAction.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: now } });
+    await tx.pendingTelegramAction.updateMany({ where: { userId, consumedAt: null }, data: { consumedAt: now, payload: Prisma.JsonNull } });
     return tx.pendingTelegramAction.create({ data: { ...(id ? { id } : {}), userId, telegramUserId: sender, kind, payload, expiresAt: new Date(now.getTime() + ttl) } });
   });
 }
@@ -234,7 +258,7 @@ export async function cancelPendingAction(userId: string, sender: string, id?: s
   if (id !== undefined) actionId.parse(id);
   return getDatabase().$transaction(async (tx) => {
     await authorizeTelegram(tx, userId, sender);
-    return tx.pendingTelegramAction.updateMany({ where: { userId, telegramUserId: sender, consumedAt: null, ...(id ? { id, expiresAt: { gt: new Date() } } : {}) }, data: { consumedAt: new Date() } });
+    return tx.pendingTelegramAction.updateMany({ where: { userId, telegramUserId: sender, consumedAt: null, ...(id ? { id, expiresAt: { gt: new Date() } } : {}) }, data: { consumedAt: new Date(), payload: Prisma.JsonNull } });
   });
 }
 
@@ -244,9 +268,10 @@ export async function approvePendingAction(userId: string, sender: string, id: s
     await authorizeTelegram(tx, userId, sender);
     const now = new Date();
     const where = { id, userId, telegramUserId: sender, kind: "PROPOSAL" as const, consumedAt: null, expiresAt: { gt: now } };
-    const claimed = await tx.pendingTelegramAction.updateMany({ where, data: { consumedAt: now } });
+    const row = await tx.pendingTelegramAction.findFirst({ where, select: { payload: true } });
+    if (!row) return null;
+    const claimed = await tx.pendingTelegramAction.updateMany({ where, data: { consumedAt: now, payload: Prisma.JsonNull } });
     if (claimed.count !== 1) return null;
-    const row = await tx.pendingTelegramAction.findFirstOrThrow({ where: { id, userId, telegramUserId: sender } });
     const payload = proposalSchema.parse(row.payload);
     const saved = [];
     for (const proposed of payload.transactions) {

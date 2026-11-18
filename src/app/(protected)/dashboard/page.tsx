@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { requirePageUser } from "@/lib/auth/session";
 import { getUserProfile } from "@/lib/auth/profile";
-import { getDashboard } from "@/lib/finance/dal";
+import { getDashboard, getUpcomingBills } from "@/lib/finance/dal";
 import { Summary } from "@/components/finance/summary";
 import { Icon } from "@/components/icon";
 import { invalidFiltersMessage, selectedMonth, type SearchParams } from "@/lib/finance/page-params";
 import { BudgetStatus, ExpenseBreakdown, MonthPicker, TrendChart } from "@/components/finance/views";
 import { RecentActivity } from "@/components/finance/recent-activity";
+import { UpcomingBills } from "@/components/finance/upcoming-bills";
 import "./activity.css";
 
 export const metadata = { title: "Dashboard — DuitFlow" };
@@ -15,7 +16,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
   const user = await requirePageUser();
   const period = selectedMonth((await searchParams).month);
   if (!period) return <p role="alert">{invalidFiltersMessage} <Link href="/dashboard">Tetapkan semula</Link></p>;
-  const [profile, dashboard] = await Promise.all([getUserProfile(user.id), getDashboard(user.id, period)]);
+  const [profile, dashboard, bills] = await Promise.all([getUserProfile(user.id), getDashboard(user.id, period), getUpcomingBills(user.id)]);
   return <>
     <header className="dashboard-heading">
       <h1 className="account-title">Selamat datang, <span>{profile.name}.</span></h1>
@@ -42,6 +43,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
           <section key={budget.id}><h3>{budget.categoryName}</h3><BudgetStatus budget={budget} /></section>
         )}</div>}
       </section>
+      <UpcomingBills bills={bills} />
       <div className="dashboard-directory">
         <details><summary><Icon name="tag" />Kategori anda <span className="category-count">{profile.categories.length}</span><Icon name="chevron" size={16} /></summary>
           <div className="directory-content">{(["EXPENSE", "INCOME"] as const).map((type) => <div key={type} className="category-group">

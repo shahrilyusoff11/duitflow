@@ -28,6 +28,12 @@
 .budget-items > section { padding: 18px var(--activity-inset); background: var(--surface); min-width: 0; }
 .budget-items h3 { font-size: 16px; font-weight: 650; }
 .budget-items .budget-status { margin-bottom: 0; }
+.bill-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 18px; }
+.bill-heading h2 { margin-bottom: 6px; }
+.bill-heading p { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 14px; font-size: 14px; color: var(--muted); }
+.bill-heading p strong { color: var(--ink); font-size: 19px; font-variant-numeric: tabular-nums; }
+.bill-due-list li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 120px); }
+.bill-due-list .activity-link { justify-self: end; }
 .dashboard-directory { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; }
 .dashboard-directory details { border-block: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
 .dashboard-directory summary { display: flex; align-items: center; gap: 10px; padding: 13px 4px; min-height: 52px; font-size: 15px; color: var(--ink); list-style: none; }
@@ -46,6 +52,8 @@
   .dashboard-directory details + details { border-top: none; }
 }
 @media (max-width: 520px) {
+  .bill-due-list li { grid-template-columns: minmax(0, 1fr) minmax(0, auto); column-gap: 10px; row-gap: 0; }
+  .bill-due-list .activity-link { grid-column: 1 / -1; justify-self: start; }
   .activity-heading { flex-wrap: wrap; gap: 0 10px; padding-block: 10px; }
   .activity-link { font-size: 13px; }
   .budget-banner { display: grid; grid-template-columns: auto 1fr; align-items: start; gap: 12px; }

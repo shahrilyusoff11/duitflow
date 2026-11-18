@@ -35,7 +35,12 @@ async function signIn(userId: string) {
   context.requestHeaders = new Headers({ cookie: fixtureSessionCookie(session.token, environment.BETTER_AUTH_SECRET) });
 }
 const proposal = (categoryId: string, amount = "12.50") => ({ transactions: [{ categoryId, amount, occurredOn: "2026-11-01", type: "EXPENSE", description: "Synthetic meal" }] });
-async function connect() { const issued = await telegram.createLinkToken(alice); expect(await telegram.redeemLinkToken(issued.token, sender)).toBe("LINKED"); }
+async function connect() {
+  const issued = await telegram.createLinkToken(alice);
+  const challenge = await telegram.redeemLinkToken(issued.token, sender);
+  if (typeof challenge === "string") throw new Error(challenge);
+  expect(await telegram.confirmTelegramLink(alice, challenge.code)).toBe(true);
+}
 
 beforeAll(async () => {
   db = await createTestDatabase();
@@ -48,6 +53,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await db.prisma.$executeRaw`TRUNCATE "User" CASCADE`;
   await db.prisma.telegramUpdate.deleteMany();
+  await db.prisma.rateLimitEvent.deleteMany();
   alice = (await db.prisma.user.create({ data: { name: "Alice", email: "alice@example.test" } })).id;
   bob = (await db.prisma.user.create({ data: { name: "Bob", email: "bob@example.test" } })).id;
   food = (await db.prisma.category.findFirstOrThrow({ where: { userId: alice, name: "Makanan & Minuman" } })).id;
@@ -67,7 +73,10 @@ describe("complete secret-authenticated webhook to Prisma flow", () => {
   it("links, clarifies an amount, rejects casual approval, saves once and handles redelivery", async () => {
     const issued = await telegram.createLinkToken(alice);
     expect((await deliver(messageUpdate(100, `/start ${issued.token}`))).status).toBe(200);
-    expect(await telegram.resolveTelegramUser(sender)).toEqual({ id: alice });
+    expect(await telegram.resolveTelegramUser(sender)).toBeNull();
+    const code = /Kod pengesahan DuitFlow: ([A-Za-z0-9_-]{16})/.exec(vi.mocked(sendMessage).mock.calls[0][1])?.[1];
+    expect(await telegram.confirmTelegramLink(alice, code)).toBe(true);
+    expect(await telegram.resolveTelegramUser(sender)).toMatchObject({ id: alice });
     expect((await deliver(messageUpdate(101, "Makan"))).status).toBe(200);
     expect((await telegram.getPendingAction(alice, sender))?.kind).toBe("CLARIFICATION");
     expect(await db.prisma.transaction.count()).toBe(0);
@@ -149,7 +158,7 @@ describe("complete secret-authenticated webhook to Prisma flow", () => {
     await deliver(messageUpdate(406, "/help"));
     expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("DuitFlow: catat belanja"), undefined);
     await deliver(messageUpdate(407, "/link"));
-    expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("pilih Tetapan"), undefined);
+    expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("masukkan kod"), undefined);
     await deliver(messageUpdate(402, "kopi RM8 lepas tu minyak RM40"));
     expect((await telegram.getPendingAction(alice, sender))?.kind).toBe("PROPOSAL");
     await deliver(messageUpdate(403, "/cancel"));
@@ -169,9 +178,12 @@ describe("Settings server action boundaries", () => {
     expect(linked).toMatchObject({ ok: true, linkUrl: expect.stringMatching(/^https:\/\/t.me\/DuitFlowTestBot\?start=[A-Za-z0-9_-]{43}$/) });
     expect(await db.prisma.telegramLinkToken.count({ where: { userId: alice } })).toBe(1);
     expect(await db.prisma.telegramLinkToken.count({ where: { userId: bob } })).toBe(0);
-    await telegram.redeemLinkToken(new URL(linked.linkUrl!).searchParams.get("start")!, sender);
+    const challenge = await telegram.redeemLinkToken(new URL(linked.linkUrl!).searchParams.get("start")!, sender);
+    if (typeof challenge === "string") throw new Error(challenge);
+    expect(await mutate({ operation: "confirmLink", code: "X".repeat(16) })).toMatchObject({ ok: false });
+    expect(await mutate({ operation: "confirmLink", code: challenge.code, userId: bob, telegramUserId: foreignSender })).toMatchObject({ ok: true });
     expect(await mutate({ operation: "unlink" })).toMatchObject({ ok: false });
-    expect(await telegram.resolveTelegramUser(sender)).toEqual({ id: alice });
+    expect(await telegram.resolveTelegramUser(sender)).toMatchObject({ id: alice });
     expect(await mutate({ operation: "unlink", confirmUnlink: "yes", userId: bob })).toMatchObject({ ok: true });
     expect(await telegram.resolveTelegramUser(sender)).toBeNull();
     await db.prisma.session.deleteMany({ where: { userId: alice } });
@@ -190,9 +202,16 @@ describe("Telegram linking with real signed web sessions and PostgreSQL", () => 
     expect(stored.hashedToken).not.toContain(issued.token);
     expect(stored.expiresAt.getTime() - Date.now()).toBeGreaterThan(9 * 60000);
     const results = await Promise.all([telegram.redeemLinkToken(issued.token, sender), telegram.redeemLinkToken(issued.token, sender)]);
-    expect(results.sort()).toEqual(["INVALID", "LINKED"]);
+    expect(results[0]).toEqual(results[1]);
+    expect(await db.prisma.telegramConnection.count()).toBe(0);
+    expect(await telegram.redeemLinkToken(issued.token, foreignSender)).toBe("CONFLICT");
+    const challenge = results[0];
+    if (typeof challenge === "string") throw new Error(challenge);
+    await expect(telegram.confirmTelegramLink(bob, challenge.code)).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const confirmations = await Promise.all([telegram.confirmTelegramLink(alice, challenge.code), telegram.confirmTelegramLink(alice, challenge.code)]);
+    expect(confirmations.sort()).toEqual([false, true]);
     expect(await db.prisma.telegramConnection.count()).toBe(1);
-    expect(await telegram.resolveTelegramUser(sender)).toEqual({ id: alice });
+    expect(await telegram.resolveTelegramUser(sender)).toMatchObject({ id: alice });
     expect(await telegram.getTelegramSettings(alice)).toMatchObject({ telegramUserId: sender });
   });
 
@@ -207,9 +226,11 @@ describe("Telegram linking with real signed web sessions and PostgreSQL", () => 
     await signIn(bob);
     const other = await telegram.createLinkToken(bob);
     expect(await telegram.redeemLinkToken(other.token, sender)).toBe("CONFLICT");
-    expect(await telegram.resolveTelegramUser(sender)).toEqual({ id: alice });
-    expect(await telegram.redeemLinkToken(other.token, foreignSender)).toBe("LINKED");
-    expect(await telegram.resolveTelegramUser(foreignSender)).toEqual({ id: bob });
+    expect(await telegram.resolveTelegramUser(sender)).toMatchObject({ id: alice });
+    const challenge = await telegram.redeemLinkToken(other.token, foreignSender);
+    if (typeof challenge === "string") throw new Error(challenge);
+    expect(await telegram.confirmTelegramLink(bob, challenge.code)).toBe(true);
+    expect(await telegram.resolveTelegramUser(foreignSender)).toMatchObject({ id: bob });
   });
 
   it("checks sessions independently, denies cross-user browser requests and blocks demo linking", async () => {
@@ -226,10 +247,12 @@ describe("Telegram linking with real signed web sessions and PostgreSQL", () => 
     await telegram.unlinkTelegram(alice);
     expect(await telegram.resolveTelegramUser(sender)).toBeNull();
     expect(await db.prisma.pendingTelegramAction.count({ where: { userId: alice, consumedAt: null } })).toBe(0);
+    expect((await db.prisma.pendingTelegramAction.findUniqueOrThrow({ where: { id: pending.id } })).payload).toBeNull();
     expect(await db.prisma.telegramLinkToken.count({ where: { userId: alice, consumedAt: null } })).toBe(0);
     await expect(telegram.approvePendingAction(alice, sender, pending.id)).rejects.toBeInstanceOf(telegram.TelegramAccessError);
     await connect();
     expect(await telegram.approvePendingAction(alice, sender, pending.id)).toBeNull();
+    expect((await db.prisma.pendingTelegramAction.findUniqueOrThrow({ where: { id: pending.id } })).payload).toBeNull();
     expect(await db.prisma.transaction.count()).toBe(0);
   });
 });
@@ -259,7 +282,9 @@ describe("atomic and scoped Telegram proposals", () => {
     expect(await telegram.approvePendingAction(alice, sender, second.id)).toBeNull();
     await signIn(bob);
     const issued = await telegram.createLinkToken(bob);
-    await telegram.redeemLinkToken(issued.token, foreignSender);
+    const challenge = await telegram.redeemLinkToken(issued.token, foreignSender);
+    if (typeof challenge === "string") throw new Error(challenge);
+    expect(await telegram.confirmTelegramLink(bob, challenge.code)).toBe(true);
     const active = await telegram.replacePendingAction(alice, sender, "PROPOSAL", proposal(food));
     expect(await telegram.approvePendingAction(bob, foreignSender, active.id)).toBeNull();
     await expect(telegram.approvePendingAction(alice, foreignSender, active.id)).rejects.toBeInstanceOf(telegram.TelegramAccessError);

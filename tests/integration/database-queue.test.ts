@@ -4,6 +4,28 @@ import { getDatabase } from "../../src/lib/db";
 
 vi.mock("server-only", () => ({}));
 
+it("refreshes the development client when Prisma is regenerated", async () => {
+  const cache = globalThis as unknown as { prisma?: unknown; prismaConstructor?: unknown };
+  const { prisma, prismaConstructor } = cache;
+  const oldClient = { transaction: {}, $disconnect: async () => {} };
+  cache.prisma = oldClient;
+  cache.prismaConstructor = function PreviousPrismaClient() {};
+  vi.stubEnv("NODE_ENV", "development");
+  vi.stubEnv("DATABASE_URL", "postgresql://postgres@127.0.0.1:1/disposable");
+  let client: ReturnType<typeof getDatabase> | undefined;
+  try {
+    client = getDatabase();
+    expect(client).not.toBe(oldClient);
+    expect(client.recurringBill.findMany).toBeTypeOf("function");
+    expect(getDatabase()).toBe(client);
+  } finally {
+    cache.prisma = prisma;
+    cache.prismaConstructor = prismaConstructor;
+    vi.unstubAllEnvs();
+    await client?.$disconnect();
+  }
+});
+
 it("lets a transaction acquire the application's busy connection after three seconds", async () => {
   const fixture = await createTestDatabase();
   vi.stubEnv("DATABASE_URL", fixture.connectionString);
