@@ -123,10 +123,10 @@ export async function consumeTelegramAiAttempt(userId: string, sender: string, m
     // One project lock protects both shared and per-user windows across workers.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('duitflow:ai:quota'))`;
     await authorizeTelegram(tx, userId, sender);
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { aiParsingEnabled: true } });
-    if (!user.aiParsingEnabled) return false;
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { deepseekParsingEnabled: true } });
+    if (!user.deepseekParsingEnabled) return false;
     const key = createHash("sha256").update(`ai-user:${userId}`).digest("hex");
-    const projectKey = createHash("sha256").update("ai-project:gemini").digest("hex");
+    const projectKey = createHash("sha256").update("ai-project:deepseek").digest("hex");
     const now = new Date();
     const day = new Date(now.getTime() - 86_400_000), minute = new Date(now.getTime() - 60_000);
     for (const [identity, perMinute, perDay] of [[key, minuteLimit, dailyLimit], [projectKey, 4, 30]] as const) {

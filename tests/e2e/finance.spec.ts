@@ -105,7 +105,7 @@ test("web finance CRUD updates monthly totals and budget warnings", async ({ pag
   await expect(page.getByRole("heading", { name: "Butiran transaksi", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Padam transaksi", exact: true }).click();
   await page.getByRole("button", { name: "Sahkan padam", exact: true }).click();
-  await page.goto("/transactions");
+  await expect(page).toHaveURL(/\/transactions$/);
   await expect(page.getByRole("link", { name: "Synthetic lunch", exact: true })).toHaveCount(0);
   await page.goto("/categories");
   await usedCategory.locator("summary").click();

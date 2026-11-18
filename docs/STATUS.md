@@ -6,8 +6,37 @@ webhook checks pass. On 15 November 2026 the owner separately confirmed all
 requested real OAuth, synthetic web CRUD, Telegram link/approval and replay
 smoke checks. Approved real auth and synthetic finance/bot writes occurred;
 no schema migration, new application dependency or paid service was introduced in Phase 5.
-Gemini credentials and live calls remain unapproved and disabled. Stretch is
-unstarted; stop here.
+The hosted release offers DeepSeek Flash with per-user opt-in. Stretch is unstarted.
+
+## DeepSeek Flash provider change — 18 November 2026
+
+- [x] Replaced Gemini with the direct `deepseek-flash` adapter in the checkout.
+  Verified JSON mode and per-token billing against official DeepSeek docs.
+- [x] Added a migration for DeepSeek-specific consent. Existing users start with
+  DeepSeek consent off. The Telegram attempt reservation checks that consent
+  before dispatch. A disposable PostgreSQL check applied the migration to an
+  existing account with the legacy flag enabled and verified DeepSeek stayed off.
+- [x] Lint, typecheck, Prisma validation, production build, 320 unit/integration
+  tests and 30 desktop/mobile browser tests passed. The browser rerun used the
+  updated consent assertions and waited for the finance deletion redirect.
+- [x] The owner approved metered DeepSeek on the existing account. Removed the
+  granted-credits-only configuration requirement.
+- [x] Local setup verification, lint, typecheck, Prisma validation, production
+  build, 320 unit/integration tests and 30 browser tests passed with the metered
+  configuration change. A direct live Flash request returned 200 and extracted
+  two synthetic expenses within the five-second application deadline.
+- [x] Applied `20261118000000_deepseek_consent` to the existing Neon production
+  branch and verified migration status is up to date. Vercel stores
+  `DEEPSEEK_API_KEY` as a Production-only Secret and `AI_PROVIDER=deepseek` as
+  Production Config.
+- [x] Vercel deployment `dpl_5J1Rreuw1QFwEd123ojA3CiMmtiK` passed staged
+  database readiness and was promoted to the canonical URL. The public browser
+  readiness and anonymous auth checks then passed with zero client errors.
+  Telegram returned 401 for a missing secret and 200 for a secret-authenticated
+  empty update. Official webhook info returned the canonical URL.
+- [ ] Live signed-in Telegram parsing requires the account owner's DeepSeek
+  opt-in. This release verified a direct live model call and the hosted webhook
+  independently. The browser tool stopped at Chrome URL verification.
 
 ## Frontend redesign — 18 November 2026
 

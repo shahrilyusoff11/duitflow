@@ -57,8 +57,9 @@ test("AI consent defaults off, requires a checkbox, persists and can be withdraw
   const region = page.getByRole("region", { name: "Privasi dan penghuraian AI", exact: true });
   await expect(region).toContainText("Dimatikan");
   await expect(region).toContainText("belum tersedia; peraturan tempatan digunakan");
-  await expect(region).toContainText("penyemak manusia");
-  const consent = region.getByRole("checkbox");
+  await expect(region).toContainText("DeepSeek Flash");
+  await expect(region.getByRole("link", { name: "Terma API DeepSeek" })).toHaveAttribute("href", "https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html");
+  const consent = region.getByRole("checkbox", { name: /DeepSeek/ });
   await expect(consent).toHaveAttribute("required", "");
   await region.getByRole("button", { name: "Hidupkan AI dengan persetujuan" }).click();
   await expect(consent).toBeVisible();

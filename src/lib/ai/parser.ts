@@ -4,7 +4,7 @@ import { todayInMalaysia } from "@/lib/finance/dates";
 import { consumeTelegramAiAttempt } from "@/lib/telegram/dal";
 import { parseTelegramText, type TelegramCategory } from "@/lib/telegram/parser";
 import { interpretAiOutput, type AiInterpretation } from "./interpret";
-import { geminiProvider } from "./provider";
+import { deepseekProvider } from "./provider";
 
 export async function parseWithAi(userId: string, sender: string, message: string, categories: TelegramCategory[], now = new Date()): Promise<AiInterpretation> {
   const fallback = () => parseTelegramText(message, categories, now);
@@ -20,7 +20,7 @@ export async function parseWithAi(userId: string, sender: string, message: strin
       timer = setTimeout(() => { controller.abort(); reject(new Error("AI_TIMEOUT")); }, AI_TIMEOUT_MS);
     });
     const raw = await Promise.race([
-      geminiProvider(config.GEMINI_API_KEY!).parse({ message, today: todayInMalaysia(now), categoryNames: categories.map((item) => item.name) }, controller.signal), deadline,
+      deepseekProvider(config.DEEPSEEK_API_KEY).parse({ message, today: todayInMalaysia(now), categoryNames: categories.map((item) => item.name) }, controller.signal), deadline,
     ]);
     return interpretAiOutput(raw, message, categories, now);
   } catch { return fallback(); }

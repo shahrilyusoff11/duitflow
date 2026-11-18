@@ -25,13 +25,16 @@ Read `DUITFLOW_CODEX_SPEC.md`, `docs/DECISIONS.md`, and `docs/STATUS.md` first.
   and publishing. Phase 5 is complete: hosted checks and GitHub CI pass, and the
   owner confirmed real production OAuth, web CRUD, Telegram linking/approval,
   replay protection and sign-out/re-login. Do not request the same setup approval
-  again. Gemini setup/live calls remain excluded.
+  again. Phase 5 shipped with deterministic parsing.
   Stop before Stretch features. See docs/DEPLOYMENT.md for the release workflow.
   The checkout is linked to Vercel Hobby `sy-74fc/duitflow`; the public origin is
   https://duitflow-lyart.vercel.app. See docs/VERCEL_SETUP.md and docs/STATUS.md for
   exact release evidence. Preserve Production-only secret scopes and `.vercelignore`.
-  Gemini credential/account/dashboard setup and live calls still require explicit
-  approval; see docs/AI_SETUP.md. No paid service is authorized.
+  On 18 November 2026 the owner approved DeepSeek Flash configuration,
+  metered API usage, and activation of the integration. Use the owner's
+  existing API account. This approval covers inference on the existing balance.
+  Top-ups, payment methods and other paid services remain outside scope.
+  See docs/AI_SETUP.md.
   The owner approved Better Auth + GitHub-only OAuth +
   PostgreSQL database sessions in chat on 15 November 2026. Implement this scope
   without asking for the same approval again. See `docs/AUTH_PROPOSAL.md`.
@@ -91,10 +94,10 @@ is required for lint, tests, typecheck, generate, or build.
 - `src/lib/finance/`: scoped finance DAL, money/date validation and aggregates.
 - `src/lib/telegram/`: private-chat validation, deterministic parser, scoped
   connection-based DAL, atomic approvals, update leases and bounded transport.
-- `src/lib/ai/`: fixed Gemini adapter, strict untrusted output validation,
+- `src/lib/ai/`: fixed DeepSeek Flash adapter, strict untrusted output validation,
   minimal payload, consent DAL, query rendering and deterministic fallback.
-  `AI_PROVIDER` defaults to deterministic; Gemini also requires an owner Free
-  project attestation and per-user consent. Never treat local caps as provider quotas.
+  `AI_PROVIDER` defaults to deterministic. DeepSeek requires a server-only API
+  key and DeepSeek-specific user consent.
 - `src/generated/prisma/`: generated, ignored; regenerate instead of editing.
 - `prisma/migrations/`: reviewed, append-only SQL. Preserve raw CHECK constraints
   and the pending-action partial index when drafting future migrations.
@@ -128,6 +131,7 @@ is required for lint, tests, typecheck, generate, or build.
 ## Do not
 
 - No paid plans, payment methods, purchases, real transfers, or banking credentials.
+  Metered DeepSeek Flash inference on the existing API balance is approved.
 - No Redis, separate backend service, message broker, or required Docker runtime.
 - No password login, auth bypass, demo write access, or fake successful handlers.
 - No secrets or raw financial messages in logs, fixtures, commits, or screenshots.
@@ -135,8 +139,8 @@ is required for lint, tests, typecheck, generate, or build.
   DATABASE_URL and DIRECT_URL. Never let automated fixture migrations use .env's
   production credentials. Run live Neon checks only when explicitly authorized.
 - No runtime SQL from AI/parser output, live AI calls in CI, or AI without user opt-in.
-- Keep Gemini to the reviewed free-eligible model; no paid fallback/automatic
-  model change. Five-second AI deadline; Postgres caps reserve before dispatch.
+- Use the reviewed `deepseek-flash` model ID. On failure, use the local parser.
+  Five-second AI deadline; Postgres caps reserve before dispatch.
 - No Stretch features or empty placeholder navigation before Core passes.
 - The public /demo is an immutable synthetic snapshot, separate from user data.
   Never turn it into a session bypass, add write controls, or enable Telegram/AI.

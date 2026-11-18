@@ -33,13 +33,13 @@ export default async function SettingsPage() {
     </section>
     <section className="account-card" aria-label="Privasi dan penghuraian AI">
       <h2>Penghuraian AI pilihan</h2>
-      <p>Persetujuan anda: <strong>{ai.aiParsingEnabled ? "Dihidupkan" : "Dimatikan"}</strong>. AI {aiAvailable ? "tersedia" : "belum tersedia; peraturan tempatan digunakan"}.</p>
-      <p>Apabila dihidupkan dan tersedia, mesej baharu anda, tarikh tempatan hari ini dan senarai nama kategori dihantar kepada Google Gemini untuk memahami bahasa biasa. Sejarah transaksi, nama profil, e-mel, ID dan token tidak dihantar.</p>
-      <p>Dalam tier percuma, Google boleh menggunakan input dan output untuk menambah baik produknya; penyemak manusia mungkin membacanya. Jangan hantar maklumat sensitif, sulit atau peribadi, termasuk butiran bank. Gunakan contoh sintetik untuk percubaan portfolio ini.</p>
+      <p>Persetujuan anda: <strong>{ai.deepseekParsingEnabled ? "Dihidupkan" : "Dimatikan"}</strong>. AI {aiAvailable ? "tersedia" : "belum tersedia; peraturan tempatan digunakan"}.</p>
+      <p>Apabila dihidupkan dan tersedia, DuitFlow menghantar mesej baharu daripada chat peribadi bot, tarikh tempatan hari ini dan nama kategori kepada DeepSeek Flash. Sejarah transaksi, nama profil, e-mel, ID dan token tidak disertakan.</p>
+      <p>Gunakan contoh sintetik untuk percubaan ini. Elakkan maklumat sensitif, sulit atau peribadi dalam mesej dan nama kategori, termasuk butiran bank.</p>
       <p>AI boleh tersilap. Semak amaun, tarikh dan kategori; hanya butang Sahkan menyimpan transaksi. Jawapan kewangan dikira daripada rekod tersimpan. Jika AI gagal atau had dicapai, gunakan Makan RM12, Gaji RM2500, /balance, /budget atau /report.</p>
       <p>Mematikan AI menghentikan penghantaran seterusnya. Permintaan yang sudah dihantar tidak boleh ditarik balik.</p>
-      <p><a className="text-link" href="https://aistudio.google.com/docs/terms" target="_blank" rel="noopener noreferrer">Terma dan penggunaan data Google Gemini</a></p>
-      <AiSettingsForm enabled={ai.aiParsingEnabled} isDemo={ai.isDemo} />
+      <p><a className="text-link" href="https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html" target="_blank" rel="noopener noreferrer">Terma API DeepSeek</a></p>
+      <AiSettingsForm enabled={ai.deepseekParsingEnabled} isDemo={ai.isDemo} />
     </section>
   </>;
 }

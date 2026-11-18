@@ -45,8 +45,8 @@ function insertBudget(categoryId: string, type: string, month = 11) {
 
 describe("reviewed PostgreSQL migrations", () => {
   it("defaults AI consent off", async () => {
-    const result = await database.query<{ aiParsingEnabled: boolean }>('SELECT "aiParsingEnabled" FROM "User" WHERE "id" = $1', ["alice"]);
-    expect(result.rows[0].aiParsingEnabled).toBe(false);
+    const result = await database.query<{ deepseekParsingEnabled: boolean }>('SELECT "deepseekParsingEnabled" FROM "User" WHERE "id" = $1', ["alice"]);
+    expect(result.rows[0].deepseekParsingEnabled).toBe(false);
   });
 
   it("permits equal category names for different users but rejects duplicate defaults for one user", async () => {

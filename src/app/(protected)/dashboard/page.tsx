@@ -53,7 +53,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
           <dl className="directory-profile">
             <div><dt>Nama</dt><dd>{profile.name}</dd></div>
             <div><dt>E-mel</dt><dd>{profile.email}</dd></div>
-            <div><dt>Penghuraian AI</dt><dd>{profile.aiParsingEnabled ? "Aktif" : "Tidak aktif"}</dd></div>
+            <div><dt>Persetujuan DeepSeek</dt><dd>{profile.aiParsingEnabled ? "Dihidupkan" : "Dimatikan"}</dd></div>
           </dl>
         </details>
       </div>

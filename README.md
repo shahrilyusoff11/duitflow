@@ -11,9 +11,8 @@ UI uses Bahasa Melayu, MYR and Malaysian calendar dates.
 **Phase 5 is complete.** Local/CI checks and hosted browser-to-Neon readiness
 pass. The owner confirmed real GitHub sign-in/out/re-login, synthetic web CRUD,
 Telegram linking and one confirmed bot expense with no duplicate on re-tap.
-Bot: [@duitflow00bot](https://t.me/duitflow00bot). Gemini credential setup and
-live calls remain unapproved and disabled. Stretch is unstarted; no paid service
-was enabled.
+Bot: [@duitflow00bot](https://t.me/duitflow00bot). DeepSeek Flash is available
+in Production for Telegram users who opt in from Settings. Stretch is unstarted.
 
 - [Implementation evidence and acceptance status](docs/STATUS.md)
 - [Actual Vercel setup and release record](docs/VERCEL_SETUP.md)
@@ -111,7 +110,7 @@ flowchart TD
   Sessions --> Web
   Telegram["Telegram private chat"] --> Hook["Secret + size + schema checks · update leases"]
   Hook --> Bot["Live connection checks · scoped bot DAL"]
-  Bot --> Parse["Deterministic parser · optional consented Gemini"]
+  Bot --> Parse["Deterministic parser · optional DeepSeek Flash"]
   Parse --> Pending["Clarify or Sahkan/Batal · atomic approval"]
   Parse --> Query["Fixed read operations · DB-rendered answers"]
   Pending --> DB["Prisma · Neon PostgreSQL"]
@@ -152,7 +151,7 @@ public; keep keys and connection strings server-side.
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Strong secret and exact app origin |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Approved GitHub OAuth app |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_BOT_USERNAME` | Optional bot; configure all three after approval |
-| `AI_PROVIDER` | Defaults to `deterministic`; Gemini setup remains unapproved |
+| `AI_PROVIDER` | Defaults to `deterministic`. DeepSeek settings are in [AI_SETUP.md](docs/AI_SETUP.md) |
 | `NEXT_PUBLIC_APP_URL`, `APP_TIMEZONE`, `APP_CURRENCY` | App URL, `Asia/Kuala_Lumpur`, `MYR` |
 
 Prisma 7.10 uses `prisma7.config.ts`. The app uses pooled `DATABASE_URL`;
@@ -204,14 +203,14 @@ seconds. Processing finishes before HTTP success; `after()` only cleans up.
 Replies may be uncertain or repeat after a network timeout while writes remain
 idempotent.
 
-AI consent defaults off. See [AI_SETUP.md](docs/AI_SETUP.md) for the fixed model,
-free-tier proposal and privacy limits. **Credential setup, AI Studio actions and
-live calls remain unapproved.** Leave `AI_PROVIDER=deterministic` and omit the
-Gemini key/attestation. Local caps are 2 calls/minute and 30/24 hours/user, plus
-4/minute and 30/24 hours/project; these are application caps, not Google quotas.
-Missing config, opt-out, cap, invalid output or timeout uses local parsing.
-[45/45 mocked golden cases](docs/AI_GOLDEN_REPORT.md) establish application
-contract behavior, not live model accuracy.
+DeepSeek consent defaults off, including for users with the legacy preference
+enabled. The owner approved metered Flash usage on the existing API account.
+See the [AI setup guide](docs/AI_SETUP.md).
+
+Local caps are 2 calls/minute and 30/24 hours per user, plus 4/minute and 30/24
+hours across the app. Missing configuration, opt-out, cap, invalid output or
+timeout uses local parsing. The application contract passes [45/45 mocked
+golden cases](docs/AI_GOLDEN_REPORT.md).
 
 ## Checks and evidence
 
@@ -262,22 +261,22 @@ report is distinct from headless readiness/CI evidence. Live unlink was not part
 of that smoke check; its existing automated tests pass. See
 [the setup record](docs/VERCEL_SETUP.md).
 
-Target: RM0/month for a small personal, non-commercial portfolio on Vercel Hobby
-and Neon Free. No paid domain, card, upgrade or paid fallback. Recheck changing
-provider terms and quotas before setup. Neon autosuspend and hosting cold starts
+Hosting and database target RM0/month on Vercel Hobby and Neon Free for this
+personal, non-commercial portfolio. Optional DeepSeek Flash inference is metered
+separately. Neon autosuspend and hosting cold starts
 can delay requests. Free capacity/history/recovery are limited; there is no
 backup automation or CSV export. Do not keep the only copy of important records
 here. Telegram cleanup is lazy and bounded; no cron, Redis or separate backend.
 
-Use synthetic portfolio data. Bot messages pass through Telegram. Gemini's free
-terms may permit improvement/human review and prohibit sensitive/personal input;
-consent does not override those terms. No credentials, linking URLs, cookies or
+Use synthetic portfolio data. Bot messages pass through Telegram. With AI consent
+and activation, new eligible messages, the local date and category names are
+sent to DeepSeek. No credentials, linking URLs, cookies or
 real financial messages belong in logs, tests, screenshots or Git. Before wider
 use, obtain a security/privacy review and assess Malaysian PDPA obligations.
 This app has no bank connections, payments, transfers or financial advice.
 
 For leaks, revoke credentials at the provider, replace only in approved stores,
 and restart/redeploy. Use BotFather `/revoke`; rotate the webhook secret and
-repeat `setWebhook`. Revoke exposed Gemini, database or OAuth credentials.
+repeat `setWebhook`. Revoke exposed DeepSeek, database or OAuth credentials.
 Auth-secret rotation invalidates session signatures and affects encrypted
 provider tokens; plan re-authentication. See [rotation and rollback](docs/DEPLOYMENT.md).

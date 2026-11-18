@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { goldenCases } from "../fixtures/ai-golden";
 import { continueClarification, type TelegramCategory } from "../../src/lib/telegram/parser";
 import { interpretAiOutput, matchCategory, resolveAiDate } from "../../src/lib/ai/interpret";
-import { getAiConfig, GEMINI_MODEL, AI_TIMEOUT_MS, readAiEnvironment } from "../../src/lib/config/ai";
+import { getAiConfig, DEEPSEEK_MODEL, AI_TIMEOUT_MS, readAiEnvironment } from "../../src/lib/config/ai";
 
 const mocks = vi.hoisted(() => ({ consume: vi.fn(), parse: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/telegram/dal", () => ({ consumeTelegramAiAttempt: mocks.consume }));
-vi.mock("@/lib/ai/provider", () => ({ geminiProvider: () => ({ parse: mocks.parse }) }));
+vi.mock("@/lib/ai/provider", () => ({ deepseekProvider: () => ({ parse: mocks.parse }) }));
 import { parseWithAi } from "../../src/lib/ai/parser";
 
 const categories: TelegramCategory[] = [
@@ -19,8 +19,8 @@ const categories: TelegramCategory[] = [
 const now = new Date("2026-10-31T16:30:00Z");
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.stubEnv("AI_PROVIDER", "gemini"); vi.stubEnv("GEMINI_API_KEY", "synthetic-not-a-live-api-key");
-  vi.stubEnv("GEMINI_MODEL", GEMINI_MODEL); vi.stubEnv("GEMINI_FREE_TIER_CONFIRMED", "yes");
+  vi.stubEnv("AI_PROVIDER", "deepseek"); vi.stubEnv("DEEPSEEK_API_KEY", "synthetic-not-a-live-api-key");
+  vi.stubEnv("DEEPSEEK_MODEL", DEEPSEEK_MODEL);
   vi.stubEnv("AI_DAILY_LIMIT_PER_USER", "30"); vi.stubEnv("AI_MINUTE_LIMIT_PER_USER", "2");
   mocks.consume.mockResolvedValue(true);
 });
@@ -49,7 +49,7 @@ describe("AI availability, privacy and failure boundaries", () => {
     expect(mocks.parse.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
   });
   it("works with no key and never requests dispatch permission", async () => {
-    vi.stubEnv("GEMINI_API_KEY", "");
+    vi.stubEnv("DEEPSEEK_API_KEY", "");
     expect((await parseWithAi("u", "12345", "Makan RM12", categories, now)).kind).toBe("PROPOSAL");
     expect(mocks.consume).not.toHaveBeenCalled(); expect(mocks.parse).not.toHaveBeenCalled();
   });
@@ -93,10 +93,13 @@ describe("AI availability, privacy and failure boundaries", () => {
       expect(() => interpretAiOutput(raw, message, categories, now)).toThrow("UNGROUNDED_AMOUNT");
     }
   });
-  it("requires explicit owner free-tier attestation and rejects unknown models/caps without secrets", () => {
-    expect(getAiConfig({ AI_PROVIDER: "gemini", GEMINI_API_KEY: "synthetic-key-longer-than20" })).toBeNull();
-    expect(getAiConfig({ AI_PROVIDER: "deterministic" })).toBeNull();
-    expect(() => readAiEnvironment({ GEMINI_MODEL: "paid-model-secret" })).toThrow("AI configuration is invalid.");
+  it("enables the fixed Flash model with a key and rejects invalid settings without revealing secrets", () => {
+    const key = "synthetic-key-longer-than20";
+    expect(getAiConfig({ AI_PROVIDER: "deepseek", DEEPSEEK_API_KEY: key })).toMatchObject({ DEEPSEEK_MODEL });
+    expect(getAiConfig({ AI_PROVIDER: "deepseek" })).toBeNull();
+    expect(getAiConfig({ AI_PROVIDER: "gemini", GEMINI_API_KEY: "synthetic-key-longer-than20", GEMINI_FREE_TIER_CONFIRMED: "yes" })).toBeNull();
+    expect(getAiConfig({ AI_PROVIDER: "deterministic", DEEPSEEK_API_KEY: key })).toBeNull();
+    expect(() => readAiEnvironment({ DEEPSEEK_MODEL: "paid-model-secret" })).toThrow("AI configuration is invalid.");
     expect(() => readAiEnvironment({ AI_DAILY_LIMIT_PER_USER: "31" })).toThrow();
   });
 });

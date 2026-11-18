@@ -12,7 +12,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuth: () => context.auth }));
 vi.mock("@/lib/db", () => ({ getDatabase: () => context.database }));
-vi.mock("@/lib/ai/provider", () => ({ geminiProvider: () => ({ parse: context.parse }) }));
+vi.mock("@/lib/ai/provider", () => ({ deepseekProvider: () => ({ parse: context.parse }) }));
 vi.mock("@/lib/telegram/transport", () => ({ sendMessage: vi.fn(async () => undefined), answerCallbackQuery: vi.fn(async () => undefined), TelegramTransportError: class extends Error { retryable = true; } }));
 
 import * as telegram from "../../src/lib/telegram/dal";
@@ -20,7 +20,7 @@ import { getAiSettings, setAiConsent } from "../../src/lib/ai/dal";
 import { mutateAiConsent } from "../../src/app/(protected)/settings/actions";
 import { POST } from "../../src/app/api/telegram/webhook/route";
 import { sendMessage } from "../../src/lib/telegram/transport";
-import { GEMINI_MODEL } from "../../src/lib/config/ai";
+import { DEEPSEEK_MODEL } from "../../src/lib/config/ai";
 import { goldenCases } from "../fixtures/ai-golden";
 
 const environment = {
@@ -28,8 +28,8 @@ const environment = {
   GITHUB_CLIENT_ID: "synthetic-client", GITHUB_CLIENT_SECRET: "synthetic-secret",
   TELEGRAM_BOT_TOKEN: "123456:synthetic-telegram-token-longer-than-twenty",
   TELEGRAM_WEBHOOK_SECRET: "synthetic-telegram-webhook-secret-longer-than32", TELEGRAM_BOT_USERNAME: "DuitFlowTestBot",
-  AI_PROVIDER: "gemini", GEMINI_API_KEY: "synthetic-not-a-live-api-key", GEMINI_MODEL,
-  GEMINI_FREE_TIER_CONFIRMED: "yes", AI_DAILY_LIMIT_PER_USER: "30", AI_MINUTE_LIMIT_PER_USER: "2",
+  AI_PROVIDER: "deepseek", DEEPSEEK_API_KEY: "synthetic-not-a-live-api-key", DEEPSEEK_MODEL,
+  AI_DAILY_LIMIT_PER_USER: "30", AI_MINUTE_LIMIT_PER_USER: "2",
 };
 let db: Awaited<ReturnType<typeof createTestDatabase>>;
 let alice: string, bob: string, food: string, transport: string, salary: string;
@@ -43,7 +43,7 @@ async function connect(userId = alice, identity = sender) {
   await db.prisma.telegramConnection.create({ data: { userId, telegramUserId: identity } });
 }
 function consentForm(operation = "enable", consent = true) {
-  const form = new FormData(); form.set("operation", operation); if (consent) form.set("consent", "yes"); return form;
+  const form = new FormData(); form.set("operation", operation); if (consent) form.set("consent", "deepseek"); return form;
 }
 const message = (id: number, text: string, identity = sender, type = "private") => ({ update_id: id, message: { message_id: id, from: { id: Number(identity), is_bot: false }, chat: { id: Number(identity), type }, text } });
 const callback = (id: number, actionId: string) => ({ update_id: id, callback_query: { id: `callback-${id}`, from: { id: Number(sender), is_bot: false }, message: { message_id: 1, chat: { id: Number(sender), type: "private" } }, data: `a:${actionId}` } });
@@ -63,20 +63,22 @@ beforeEach(async () => {
   transport = (await db.prisma.category.findFirstOrThrow({ where: { userId: alice, name: "Pengangkutan" } })).id;
   salary = (await db.prisma.category.findFirstOrThrow({ where: { userId: alice, name: "Gaji" } })).id;
   await signIn(alice); vi.clearAllMocks(); context.parse.mockReset();
-  vi.stubEnv("GEMINI_API_KEY", environment.GEMINI_API_KEY);
+  vi.stubEnv("DEEPSEEK_API_KEY", environment.DEEPSEEK_API_KEY);
 });
 afterAll(async () => { await db.close(); vi.unstubAllEnvs(); });
 
 describe("AI consent and authorization with real persisted browser sessions", () => {
   it("defaults off, requires explicit consent and derives the owner from the session", async () => {
-    expect(await getAiSettings(alice)).toEqual({ aiParsingEnabled: false, isDemo: false });
+    expect(await getAiSettings(alice)).toEqual({ deepseekParsingEnabled: false, isDemo: false });
     expect((await mutateAiConsent({ ok: false, message: "" }, consentForm("enable", false))).ok).toBe(false);
+    const oldForm = consentForm(); oldForm.set("consent", "yes");
+    expect((await mutateAiConsent({ ok: false, message: "" }, oldForm)).ok).toBe(false);
     const form = consentForm(); form.set("userId", bob);
     expect((await mutateAiConsent({ ok: false, message: "" }, form)).ok).toBe(true);
-    expect((await getAiSettings(alice)).aiParsingEnabled).toBe(true);
-    expect((await db.prisma.user.findUniqueOrThrow({ where: { id: bob } })).aiParsingEnabled).toBe(false);
+    expect((await getAiSettings(alice)).deepseekParsingEnabled).toBe(true);
+    expect((await db.prisma.user.findUniqueOrThrow({ where: { id: bob } })).deepseekParsingEnabled).toBe(false);
     expect((await mutateAiConsent({ ok: false, message: "" }, consentForm("disable", false))).ok).toBe(true);
-    expect((await getAiSettings(alice)).aiParsingEnabled).toBe(false);
+    expect((await getAiSettings(alice)).deepseekParsingEnabled).toBe(false);
   });
   it("denies foreign IDs, missing IDs, revoked sessions and demo mutation", async () => {
     await expect(getAiSettings(bob)).rejects.toThrow("FORBIDDEN");
@@ -91,7 +93,8 @@ describe("AI consent and authorization with real persisted browser sessions", ()
 });
 
 describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", () => {
-  it("uses deterministic intake when off, with no API or quota event", async () => {
+  it("uses deterministic intake with only legacy Gemini consent, with no API or quota event", async () => {
+    await db.prisma.user.update({ where: { id: alice }, data: { aiParsingEnabled: true } });
     await connect();
     expect((await deliver(message(100, "Makan RM12"))).status).toBe(200);
     expect(context.parse).not.toHaveBeenCalled();
@@ -124,9 +127,9 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
   });
   it("withdrawal and missing credentials prevent future API calls", async () => {
     await connect(); await setAiConsent(alice, true);
-    vi.stubEnv("GEMINI_API_KEY", "");
+    vi.stubEnv("DEEPSEEK_API_KEY", "");
     await deliver(message(300, "Makan RM12"));
-    vi.stubEnv("GEMINI_API_KEY", environment.GEMINI_API_KEY);
+    vi.stubEnv("DEEPSEEK_API_KEY", environment.DEEPSEEK_API_KEY);
     await setAiConsent(alice, false);
     await deliver(message(301, "Makan RM14"));
     expect(context.parse).not.toHaveBeenCalled(); expect(await db.prisma.rateLimitEvent.count()).toBe(0);
@@ -185,7 +188,7 @@ describe("atomic shared Postgres AI limits", () => {
     await telegram.consumeTelegramAiAttempt(alice, sender, 2, 30); await telegram.consumeTelegramAiAttempt(alice, sender, 2, 30);
     await telegram.consumeTelegramAiAttempt(bob, bobSender, 2, 30); await telegram.consumeTelegramAiAttempt(bob, bobSender, 2, 30);
     // Only the user event timestamps move, leaving the project window full.
-    const projectKey = createHash("sha256").update("ai-project:gemini").digest("hex");
+    const projectKey = createHash("sha256").update("ai-project:deepseek").digest("hex");
     await db.prisma.rateLimitEvent.updateMany({ where: { key: { not: projectKey } }, data: { createdAt: new Date(Date.now() - 61_000) } });
     expect(await telegram.consumeTelegramAiAttempt(alice, sender, 2, 30)).toBe(false);
     await db.prisma.rateLimitEvent.deleteMany();

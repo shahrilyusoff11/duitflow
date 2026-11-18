@@ -460,3 +460,21 @@ Documentation search, authenticated `list_teams` returning SY and explicit
 known-team `get_project` for DuitFlow now pass. The earlier tool-catalogue/access
 limitation is closed without reconnecting, removing other servers, exposing
 tokens or weakening mutation confirmations. Vercel agent setup is complete.
+
+## 2026-11-18 — DeepSeek Flash replaces the planned Gemini provider
+
+Use `deepseek-flash` on DeepSeek's direct Chat Completions API. It supports
+JSON mode and disabling thinking. The model receives the existing minimal
+payload and a schema in the system prompt. Local Zod validation, the five-second
+deadline, PostgreSQL quotas and explicit Telegram approval still apply.
+[Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion/)
+
+DeepSeek bills by token and deducts granted credits first. Keep the local parser
+as the default. The owner subsequently approved metered usage on the existing
+DeepSeek balance. The app requires a key and user opt-in, and keeps its existing
+PostgreSQL call caps. [DeepSeek pricing](https://api-docs.deepseek.com/quick_start/pricing/)
+
+Consent names the data recipient, so DeepSeek uses a new flag that defaults off
+for every account. Retain the legacy column for compatibility with the previous
+release. Deploy the additive migration before the updated app. Settings consent
+and the Telegram dispatch check both use the new flag.

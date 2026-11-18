@@ -1,78 +1,39 @@
-# Phase 4 AI parsing — free-only setup proposal
+# DeepSeek Flash setup
 
-Implementation is available locally. **Credential setup and live API calls are
-not approved or performed.** No key is required for the web app, Telegram
-commands, deterministic intake, tests or build. Phase 5 local polish and deployment
-preparation are authorized; Gemini setup and live calls remain unapproved.
+DuitFlow uses the local parser by default. The optional adapter uses
+`deepseek-flash` with JSON output and thinking disabled. DeepSeek's current
+Flash model and API contract were checked on 18 November 2026.
+[DeepSeek model pricing](https://api-docs.deepseek.com/quick_start/pricing/),
+[Chat Completions API](https://api-docs.deepseek.com/api/create-chat-completion/)
 
-## Public eligibility checked on 15 November 2026
+## Activation with an API key
 
-Proposed model: **`gemini-3.5-flash-lite`**, direct Gemini Developer API,
-standard text `generateContent`, no tools or grounding. Google's current
-[pricing](https://aistudio.google.com/docs/pricing#gemini-3.5-flash-lite) lists
-free input/output tokens, and the [model page](https://aistudio.google.com/docs/models/gemini-3.5-flash-lite)
-supports structured output. The older 2.5 Flash model is deprecated; do not copy
-old model names or enable automatic fallback to another model.
+The DeepSeek API bills by token, deducting granted balance before topped-up
+balance. On 18 November 2026 the owner approved metered inference on the existing
+API account. The owner manages any balance top-up or payment changes.
+[DeepSeek deduction rules](https://api-docs.deepseek.com/quick_start/pricing/#deduction-rules)
 
-[Malaysia is supported](https://aistudio.google.com/docs/available-regions).
-The [billing guide](https://aistudio.google.com/docs/billing) says new accounts
-begin on Free; paid usage requires linking a billing account. Use an **unbilled
-Free project**, never a paid project, billing account, card, prepayment or trial
-that could incur charges. If account verification demands payment, stop and
-keep the deterministic parser. Public eligibility does not verify this owner's
-account, available quota or access to the model.
-
-Google's [quota guide](https://aistudio.google.com/docs/rate-limits) currently
-directs developers to AI Studio for project-specific RPM/TPM/RPD. It does not
-publish a universal numeric quota for the chosen model. Quotas apply per project,
-not per key; Google's daily reset is Pacific midnight and capacity is not
-guaranteed. Record actual project limits only after approved read-only dashboard
-inspection. Do not promise any particular free request allowance.
-
-The [current terms](https://aistudio.google.com/docs/terms) require age 18+ and
-an allowed region; unpaid prompts/responses can be used for product improvement
-and human review. They prohibit submitting sensitive, confidential or personal
-information. Free service also has regional restrictions for EEA/UK/Switzerland
-clients. This opt-in portfolio experiment is limited to adults in Malaysia using
-synthetic, non-sensitive examples. Do not represent consent as overriding those
-terms or offer real confidential financial processing through this free tier.
-
-## Approval required before proceeding
-
-The owner's request and AGENTS.md require approval before credential setup or
-dashboard operations. The reviewable proposal is direct Gemini with this fixed
-model, an unbilled Free project, synthetic smoke input only, no paid fallback,
-and the default limits below. Approval to implement Phase 4 does not itself
-approve creating/importing a project, accepting terms, creating a key or calling
-the live service. None of these has happened in this phase.
-
-After explicit approval, the owner can open
-[AI Studio API keys](https://aistudio.google.com/api-keys), confirm the project
-shows **Free** with no linked billing, inspect
-[active quotas](https://aistudio.google.com/rate-limit), and create/restrict a
-server-only key for the Gemini API. Never paste the key into chat, screenshots,
-tracked files or a NEXT_PUBLIC variable. Save it only in ignored .env or a
-separately approved hosting secret store. See [Phase 5 deployment preparation](DEPLOYMENT.md);
-hosting setup and publishing require separate approval, and do not authorize AI.
-
-Only once those conditions are confirmed, the proposed ignored local config is:
+Place the existing API key in an ignored local `.env` file. In Vercel, use a sensitive
+Production-only Vercel variable. Keep the key out of chat, tracked files,
+screenshots and `NEXT_PUBLIC_` variables.
 
 ```dotenv
-AI_PROVIDER="gemini"
-GEMINI_API_KEY="<save locally only>"
-GEMINI_MODEL="gemini-3.5-flash-lite"
-GEMINI_FREE_TIER_CONFIRMED="yes"
+AI_PROVIDER="deepseek"
+DEEPSEEK_API_KEY="<save in secret storage>"
+DEEPSEEK_MODEL="deepseek-flash"
 AI_DAILY_LIMIT_PER_USER="30"
 AI_MINUTE_LIMIT_PER_USER="2"
 ```
 
-`GEMINI_FREE_TIER_CONFIRMED` is an owner attestation, not an API billing probe.
-The app cannot infer the billing tier from a key. If eligibility, terms or model
-availability change, set AI_PROVIDER=deterministic and remove the attestation.
-Never upgrade billing to repair a 429/403. Lower local limits if the project's
-actual quotas are smaller. Run setup:check (format only), restart the app, then
-enable consent in Settings on an authenticated non-demo account. Consent is
-stored independently of service availability and defaults off at signup.
+Set `AI_PROVIDER=deterministic` to pause API calls. If the balance runs out,
+DeepSeek returns HTTP 402 and DuitFlow uses the local parser. [DeepSeek API errors](https://api-docs.deepseek.com/quick_start/error_codes/)
+
+Apply the reviewed Prisma migration to the target database before running this
+release. It adds a DeepSeek consent flag that defaults off for all accounts,
+including existing users with the legacy flag set. Run `npm run setup:check` to
+check configuration format, then restart or redeploy and open **Settings →
+Penghuraian AI pilihan** to opt in on an authenticated non-demo account. Consent
+persists independently of availability and can be withdrawn from Settings.
 
 ## Runtime boundaries and limits
 
@@ -96,12 +57,12 @@ stored independently of service availability and defaults off at signup.
 - Postgres rate events and an advisory transaction lock enforce at most 2 calls
   per rolling minute and 30 per rolling 24 hours per user (configurable downward),
   plus 4/minute and 30/24 hours across the application project. These are local
-  safety caps, **not Google's quotas**. Attempts reserve capacity before network
+  safety caps. Attempts reserve capacity before network
   dispatch, including failed calls. No Redis or process-local limit fallback.
 - Network + body-read + parse deadline: five seconds; 32 KB HTTP envelope,
   20 KB model text, 4,000-character input, 100 category names, 4,096 output tokens.
-  No retries, tools, cache, paid routing, gateway account or new npm dependency.
-  Missing key/attestation, opt-out, cap, DB permission failure, timeout, upstream
+  One direct request per attempt, with tools and app-side caching disabled.
+  Missing key, opt-out, cap, DB permission failure, timeout, upstream
   error or invalid output falls back to the deterministic parser. Unsupported
   language gets guidance rather than a fake success.
 - Telegram sends immediate processing feedback, then finishes bounded work
@@ -113,25 +74,23 @@ stored independently of service availability and defaults off at signup.
   already sent cannot be recalled. Unlink prevents a later proposal/write/query
   because every scoped DAL operation rechecks the live connection.
 
-The installed Next.js mutation, Route Handler and after() guides were read;
-[Vercel's duration guide](https://vercel.com/docs/functions/configuring-functions/duration)
-was checked. No hosting account, configuration change, timing benchmark or live
-Telegram/Gemini delivery is claimed.
+Use synthetic, non-sensitive messages and category names for the portfolio
+experiment. The Settings notice names the provider and explains what is sent.
+[DeepSeek Open Platform terms](https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html)
 
 ## Verification and rotation
 
 See [the mocked golden-set report](AI_GOLDEN_REPORT.md) and
 [actual check results](STATUS.md). Automated HTTP, integration and browser tests
-use synthetic data/disposable storage and mocked AI; CI never calls Gemini.
-They establish application validation and authorization, not live model accuracy.
+use synthetic data, disposable storage and mocked AI. They verify application
+validation and authorization. A direct live Flash smoke returned two synthetic
+expenses in a schema-valid response within the five-second deadline. See the
+status log for deployment and signed-in Telegram verification.
 
-Once separately approved, a live smoke check should use only synthetic messages
+Use only synthetic messages for a live smoke check
 (e.g. breakfast RM8 and petrol RM40), review all proposed values, cancel or
 explicitly confirm once, then verify no duplicate on re-tap. Check opt-out and
 no-key fallback too. Do not use real financial records for this check.
 
-For a leaked key, disable AI, revoke it in AI Studio, create a restricted
-replacement only after approval, update ignored/approved secret storage, and
-restart/redeploy. Consent need not be reset, but users should be informed if
-their data was exposed. Never log or commit either key. Provider terms, quotas
-and eligibility must be rechecked before eventual deployment.
+For a leaked key, disable AI, revoke the key with DeepSeek, and update approved
+secret storage with an approved replacement before restarting or redeploying.

@@ -5,8 +5,8 @@ Command: `npx vitest run tests/unit/ai-parser.test.ts`.
 
 These are synthetic Malay/English messages with hand-authored mocked provider
 responses. They exercise the production provider selection, permission check,
-strict parsing, normalization and fallback boundary. They do not measure a live
-Gemini model's extraction accuracy; no real key or API request was used.
+strict parsing, normalization and fallback boundary. Live extraction accuracy
+remains unverified.
 
 | Coverage | Cases |
 | --- | ---: |

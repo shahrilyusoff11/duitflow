@@ -13,10 +13,11 @@ test("a real database session opens only its owner's space and sign-out revokes 
   await expect(page.getByText(`${project}@example.test`, { exact: true })).toBeVisible();
   await page.locator("summary").filter({ hasText: "Kategori anda" }).click();
   await expect(page.getByRole("listitem")).toHaveCount(10);
-  await expect(page.getByText("Tidak aktif", { exact: true })).toBeVisible();
+  await expect(page.getByText("Persetujuan DeepSeek", { exact: true })).toBeVisible();
+  await expect(page.getByText("Dimatikan", { exact: true })).toBeVisible();
   const profile = await context.request.get("/api/profile?userId=someone-else");
   expect(profile.status(), await profile.text()).toBe(200);
-  expect((await profile.json()).id).toBe(`browser-${project}`);
+  expect(await profile.json()).toMatchObject({ id: `browser-${project}`, aiParsingEnabled: false });
   await page.screenshot({ path: testInfo.outputPath("dashboard.png"), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   await page.getByRole("button", { name: "Log keluar", exact: true }).click();

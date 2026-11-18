@@ -13,7 +13,7 @@ export async function mutateAiConsent(_previous: { ok: boolean; message: string 
   try {
     const user = await requireUser();
     const enabled = z.enum(["enable", "disable"]).parse(form.get("operation")) === "enable";
-    if (enabled) z.literal("yes").parse(form.get("consent"));
+    if (enabled) z.literal("deepseek").parse(form.get("consent"));
     await setAiConsent(user.id, enabled);
     revalidatePath("/settings");
     return { ok: true, message: enabled ? "Persetujuan AI disimpan. AI hanya digunakan apabila tersedia; semak setiap cadangan sebelum Sahkan." : "Penghuraian AI dimatikan. Mesej seterusnya menggunakan peraturan tempatan." };

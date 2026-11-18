@@ -5,11 +5,11 @@ Updated on 15 November 2026. The approved Vercel Hobby web release is live at
 [the read-only synthetic demo](https://duitflow-lyart.vercel.app/demo).
 Hosted readiness and anonymous denial pass. The owner confirmed real production
 OAuth, synthetic web CRUD, Telegram linking/approval and no duplicate on re-tap.
-Phase 5 is complete. Existing Neon/local auth are preserved, Gemini remains
-unapproved and disabled, and Stretch is unstarted. See
+Phase 5 is complete. The 18 November update added metered DeepSeek Flash with
+user opt-in. Stretch is unstarted. See
 [the setup record](VERCEL_SETUP.md) and [full verification evidence](STATUS.md).
 
-## Current release evidence
+## Phase 5 release evidence
 
 | Item | Actual result |
 | --- | --- |
@@ -135,7 +135,8 @@ each value. Env changes require a new deployment.
 | `NEXT_PUBLIC_APP_URL` | Same canonical origin | Preview's own origin if needed |
 | `APP_TIMEZONE` | `Asia/Kuala_Lumpur` | Same |
 | `APP_CURRENCY` | `MYR` | Same |
-| `AI_PROVIDER` | `deterministic` | `deterministic` |
+| `AI_PROVIDER` | `deepseek` | `deterministic` |
+| `DEEPSEEK_API_KEY` | Approved token stored as a Production-only Secret | Omit |
 | `TELEGRAM_BOT_TOKEN` | Approved BotFather token; configure all three bot variables | Omit |
 | `TELEGRAM_WEBHOOK_SECRET` | 32–256 random `A-Z a-z 0-9 _ -` characters | Omit |
 | `TELEGRAM_BOT_USERNAME` | Actual username without `@` | Omit |
@@ -146,9 +147,11 @@ Final project-metadata verification confirmed `DATABASE_URL`,
 were printed. Hosting contains no `GEMINI_API_KEY`, `DATABASE_URL_UNPOOLED` or
 `DIRECT_URL`; preserve those boundaries on future releases.
 
-Leave `GEMINI_API_KEY` absent and `GEMINI_FREE_TIER_CONFIRMED` absent or `no`.
-Do not enable Gemini. Deterministic flows work without a key; a later request
-must separately approve [AI setup](AI_SETUP.md).
+For the approved [DeepSeek activation](AI_SETUP.md), set `AI_PROVIDER=deepseek`
+in Production and store `DEEPSEEK_API_KEY` as a Production-only Secret. Apply the reviewed
+`20261118000000_deepseek_consent` migration via `npm run db:deploy` before
+deploying the DeepSeek code, including in deterministic mode. Use the approved
+direct connection for the migration and keep it out of Vercel.
 
 The auth secret must have at least 32 random characters. Do not silently replace
 it while reusing the existing database: Better Auth also uses it for encrypted
@@ -194,8 +197,8 @@ or impersonate a session. Repeat those checks after future auth releases.
 
 ## 5. Review migrations separately, then publish
 
-Existing Neon already has all three reviewed migrations. Phase 5 adds no schema
-migration or demo DB seed. Do not reset, recreate or reseed production. In a
+Phase 5 used the three existing migrations. The DeepSeek update added the
+reviewed consent migration listed above. Do not reset, recreate or reseed production. In a
 trusted local shell with the existing ignored `.env`:
 
 ```sh
@@ -258,7 +261,7 @@ traces. See [Telegram's registration/status API](https://core.telegram.org/bots/
 
 Use the owner's real browser session and private bot chat with synthetic data.
 Complete real OAuth normally; no impersonation, fake cookie or demo write
-access. Keep Gemini disabled throughout.
+access. Keep external AI disabled throughout.
 
 The owner replied **“ALL CHECKS PASSED”** to the exact final smoke request:
 Settings link/Start, synthetic RM12 expense/Sahkan, exactly one visible web row,
@@ -307,7 +310,7 @@ For leaks, use BotFather `/revoke`, replace bot token/webhook secret in approved
 stores, redeploy and repeat `setWebhook` plus the synthetic check. Unlink and
 replace exposed links. Revoke exposed database/OAuth credentials. Auth-secret
 rotation invalidates session signatures and affects encrypted provider tokens;
-plan re-authentication. Any future Gemini replacement remains separately gated.
+plan re-authentication. Use `AI_PROVIDER=deterministic` and redeploy to pause DeepSeek.
 
 Neon autosuspend and hosting cold starts can delay first requests. Free plans
 have finite capacity, recovery and history: check actual usage in approved

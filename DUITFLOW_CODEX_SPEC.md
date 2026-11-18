@@ -4,7 +4,7 @@
 >
 > **Language:** English for code, database names, commit messages and technical docs. User-facing UI and Telegram messages default to Bahasa Melayu (Malaysia), MYR currency, `Asia/Kuala_Lumpur` timezone.
 >
-> **Budget constraint:** Target **RM0/month** for a small, personal, non-commercial portfolio MVP on free tiers. Free tiers have quotas and terms that change. **Never enable paid billing, add a payment method, or accept a paid upgrade without explicit human approval.** If a provider requires billing for a feature, stop and propose a free alternative. No paid AI API by default.
+> **Budget constraint.** Target **RM0/month** for hosting and database on free tiers. The owner authorized metered DeepSeek Flash inference on the existing API balance on 18 November 2026. Separate approval is required for top-ups, payment methods, paid upgrades and other paid services.
 
 ## 0. Changes from v1 (for the human reader)
 
@@ -24,7 +24,7 @@
 
 ## 2. Scope tiers
 
-**Core (must ship):** auth, categories, transactions CRUD, dashboard aggregates, monthly budgets, Telegram linking, Telegram commands, confirmed natural-language intake, deterministic fallback parser, Gemini parser, core tests, deployment, README.
+**Core (must ship):** auth, categories, transactions CRUD, dashboard aggregates, monthly budgets, Telegram linking, Telegram commands, confirmed natural-language intake, deterministic fallback parser, optional DeepSeek Flash parser, core tests, deployment, README.
 
 **Stretch (only after Core passes all acceptance criteria):** Recurring Commitments, `FinancialAccount` (multiple wallets/accounts), CSV export, expanded Playwright coverage, Telegram proposal editing.
 
@@ -38,7 +38,7 @@ If a Stretch feature is skipped, remove it from the UI and navigation. Do not le
 - **ORM/migrations:** Prisma with a reviewed migration workflow (`prisma migrate`). Use the **pooled** URL for the app (`DATABASE_URL`) and the **direct** URL for migrations (`DIRECT_URL`). Document Neon autosuspend cold starts.
 - **Authentication:** Auth.js, subject to the checks in §3.1.
 - **Validation:** Zod for all untrusted input, including AI output and Telegram payloads.
-- **AI:** Google Gemini API with a model **currently eligible for a free API tier**, behind an `AI_PROVIDER` abstraction. Verify current quotas/terms before choosing a model. A **zero-cost deterministic parser fallback** is mandatory.
+- **AI:** DeepSeek API with the fixed `deepseek-flash` model, behind an `AI_PROVIDER` abstraction. The owner approved metered inference. Live calls require a server-side API key and user opt-in. The deterministic parser is the default and fallback.
 - **Telegram:** Bot API with HTTPS webhook via a Next.js Route Handler.
 - **Charts:** Recharts or equivalent lightweight open-source library.
 - **Testing:** Vitest (unit/integration), Playwright (critical browser flows only in Core).
@@ -176,13 +176,13 @@ Approval must be idempotent under double-taps and replays. Within a single DB tr
 
   Unknown category names are fuzzy-matched on the server against that user's categories; if no confident match, ask the user.
 - Answers are rendered from real query results. **Never hallucinate balances.**
-- **Privacy / AI opt-in:** free-tier provider data policies may allow prompts to be used for model improvement. Make AI parsing a **per-user setting (default off, or explicit consent on first use)** with a clear notice in Settings. When on, send only: the message text, today's local date, and the category name list. Never send full history, names, emails, tokens or IDs. When off or unavailable, use the deterministic parser only.
+- **Privacy / AI opt-in:** make DeepSeek parsing a **per-user setting that defaults off**, with a clear notice in Settings. When enabled and available, send only the message text, today's local date and the category name list. Never send full history, profile names, emails, tokens or IDs. When off or unavailable, use the deterministic parser.
 - **Deterministic fallback** handles at least: `Makan RM12`, `Gaji RM2500`, `<description> <amount>`, `/balance`, `/budget`, `/report`. Distinguish "unsupported freeform language" from "parsed successfully" and tell the user which commands/formats still work.
 - **Rate limiting without Redis:** use a Postgres table (e.g. `RateLimitEvent(userId or ip hash, bucket, createdAt)`) to cap AI calls per user per day/minute and login attempts. Fail closed to the deterministic parser when the AI cap is hit.
 
 ## 5. Suggested data model (adapt as needed)
 
-- `User`: id, email/provider fields, `aiParsingEnabled` (boolean), createdAt, plus whatever the chosen Auth.js adapter requires.
+- `User`: id, email/provider fields, `deepseekParsingEnabled` (boolean), createdAt, plus whatever the chosen auth adapter requires.
 - `Category`: id, `userId` (nullable only if global defaults are used), name, `transactionType`, createdAt; uniqueness per §4.5.
 - `Transaction`: id, userId, categoryId, type (`INCOME`/`EXPENSE`), amount `Decimal(12,2)`, description, **`occurredOn` Date**, source (`WEB`/`TELEGRAM`), createdAt, updatedAt. Indexes: `(userId, occurredOn)`, `(userId, categoryId, occurredOn)`.
 - `Budget`: id, userId, categoryId, year, month, `limitAmount Decimal(12,2)`; unique `(userId, categoryId, year, month)`.
@@ -207,7 +207,7 @@ Browser (Next.js React UI)        Telegram User
             |                           |
             +--- Auth / validation / business logic ---+
                               |
-               Optional Gemini parser (free tier, opt-in)
+               Optional DeepSeek Flash parser (opt-in)
                               |
                       Zod validation
                               |
@@ -253,7 +253,7 @@ Browser (Next.js React UI)        Telegram User
 - Neon connection (pooled for app, direct for migrations), env vars set in provider dashboards.
 - Configure the Telegram webhook with `setWebhook`, a secret token, `allowed_updates: ["message","callback_query"]`.
 - Webhook mode needs no persistent bot server.
-- README must include instructions to **rotate** the Telegram bot token (BotFather `/revoke`), the webhook secret and the Gemini key if leaked, and to re-run `setWebhook` afterwards.
+- README must include instructions to **rotate** the Telegram bot token (BotFather `/revoke`), the webhook secret and the DeepSeek key if leaked, and to re-run `setWebhook` afterwards.
 - Document free-tier quotas, database autosuspend/cold starts, privacy terms and provider term limits without implying they are unlimited.
 - Do not call the app production-ready for real financial data without a security and privacy review.
 
@@ -319,8 +319,8 @@ duplicate work so a killed worker does not lose its retry (docs/DECISIONS.md).
 Live bot credentials, public HTTPS webhook registration and real delivery are
 not claimed at that checkpoint. Phase 4 evidence follows.
 
-### Phase 4 — Free-tier AI parsing
-1. Gemini behind `AI_PROVIDER` abstraction; verify current free-tier model and quota first and report the choice.
+### Phase 4 — Optional AI parsing
+1. DeepSeek Flash behind `AI_PROVIDER`. Verify the API model and current pricing before activation. The owner approved metered inference on 18 November 2026.
 2. Per-user AI opt-in setting and notice; minimal prompt payload (§4.8).
 3. Strict Zod validation; multi-transaction messages; relative dates resolved server-side; enumerated query operations.
 4. Postgres-backed rate limiting; timeout and fallback to deterministic parser.
@@ -332,7 +332,9 @@ not claimed at that checkpoint. Phase 4 evidence follows.
 315 unit/integration tests, 20 browser tests and 45/45 mocked golden cases pass.
 Gemini 3.5 Flash-Lite public free eligibility was verified; exact project quotas
 and credential setup require approval. No live AI call/model-accuracy claim.
-See docs/AI_SETUP.md and docs/STATUS.md. Gemini setup/live calls remain gated.
+The provider was replaced locally with DeepSeek Flash on 18 November 2026.
+See docs/AI_SETUP.md for the current activation conditions and docs/STATUS.md
+for verification evidence.
 
 ### Phase 5 — Polish and deploy
 1. Responsiveness, accessibility, error/empty states.
@@ -404,10 +406,10 @@ AUTH_GITHUB_SECRET=""
 TELEGRAM_BOT_TOKEN="replace-with-bot-token"
 TELEGRAM_WEBHOOK_SECRET="replace-with-random-secret"
 
-# AI (choose a free-tier-eligible model in the provider console)
-AI_PROVIDER="gemini"
-GEMINI_API_KEY=""
-GEMINI_MODEL=""
+# Optional metered AI (select deepseek and provide its server-side key to enable)
+AI_PROVIDER="deterministic"
+# DEEPSEEK_API_KEY=""
+# DEEPSEEK_MODEL="deepseek-flash"
 AI_DAILY_LIMIT_PER_USER="30"
 
 # App configuration
@@ -424,7 +426,7 @@ Names may be refined to match the chosen libraries. Never put real credentials i
 2. Create and maintain an **`AGENTS.md`** at the repo root with: install/run/test/lint/typecheck/build/migrate commands, folder conventions, money and date rules (§4.3, §4.4), the "all data access requires `userId`" rule, and a "do not" list (no paid services, no float money, no AI-authored SQL). Keep it current so later sessions stay consistent.
 3. Work incrementally; prefer a working vertical slice over many unfinished files.
 4. Underspecified requirement → choose a secure, conventional default, record the decision in `docs/DECISIONS.md`, and continue.
-5. **Do not rely on memorized APIs or versions.** Before adding dependencies or choosing the Gemini model, check current official docs and compatibility (Next.js, Auth.js, Prisma, Vercel limits, Gemini free-tier eligibility).
+5. **Do not rely on memorized APIs or versions.** Before adding dependencies or selecting a provider model, check current official docs, compatibility and pricing.
 6. **Stop and ask the human** before: choosing the auth approach, adding any dependency that needs an account/API key, anything requiring a dashboard login (Neon, Vercel, BotFather, AI provider), or anything that might incur cost.
 7. No hardcoded fake production data, mocked success paths or placeholder handlers in features claimed complete.
 8. Balances, authorization and mutations stay on the server; AI is only a parser/assistant, never a source of truth.

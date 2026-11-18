@@ -22,8 +22,8 @@ const environment = {
   TELEGRAM_BOT_TOKEN: "123456:synthetic-telegram-token-longer-than-twenty",
   TELEGRAM_WEBHOOK_SECRET: "synthetic-telegram-webhook-secret-longer-than32",
   TELEGRAM_BOT_USERNAME: "DuitFlowTestBot",
-  AI_PROVIDER: "deterministic", GEMINI_API_KEY: "", GEMINI_FREE_TIER_CONFIRMED: "no",
-  GEMINI_MODEL: "gemini-3.5-flash-lite", AI_DAILY_LIMIT_PER_USER: "30", AI_MINUTE_LIMIT_PER_USER: "2",
+  AI_PROVIDER: "deterministic", DEEPSEEK_API_KEY: "",
+  DEEPSEEK_MODEL: "deepseek-flash", AI_DAILY_LIMIT_PER_USER: "30", AI_MINUTE_LIMIT_PER_USER: "2",
   NEXT_TELEMETRY_DISABLED: "1", VERCEL: "",
 };
 
