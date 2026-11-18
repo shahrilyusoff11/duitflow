@@ -16,8 +16,10 @@ export default async function BillPaymentPage({ params }: { params: Promise<{ id
   const bill = await getBill(user.id, id.data);
   if (!bill?.active) notFound();
   return <>
-    <Link className="text-link" href="/bills">← Bil berulang</Link>
-    <h1 className="account-title">Rekod bayaran</h1>
+    <header className="workspace-heading">
+      <h1 className="account-title">Rekod bayaran</h1>
+      <Link className="inline-link" href="/bills">← Bil berulang</Link>
+    </header>
     <section className="account-card" aria-labelledby="payment-heading">
       <h2 id="payment-heading">{bill.name}</h2>
       <p>Tarikh bil <time dateTime={bill.nextDueOn}>{displayDate(bill.nextDueOn)}</time> · {bill.categoryName}</p>

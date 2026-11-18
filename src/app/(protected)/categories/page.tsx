@@ -1,6 +1,7 @@
 import { requirePageUser } from "@/lib/auth/session";
 import { listCategories } from "@/lib/finance/dal";
 import { MutationForm } from "@/components/finance/mutation-form";
+import { Icon } from "@/components/icon";
 
 export const metadata = { title: "Kategori — DuitFlow" };
 
@@ -12,21 +13,30 @@ export default async function CategoriesPage() {
   const user = await requirePageUser();
   const categories = await listCategories(user.id);
   return <>
-    <p className="kicker">SUSUN REKOD ANDA</p><h1 className="account-title">Kategori</h1>
-    <p>Kategori yang digunakan oleh transaksi atau bajet mesti dikosongkan dahulu sebelum dipadam atau ditukar jenis.</p>
-    <section className="account-card"><h2>Tambah kategori</h2><MutationForm operation="createCategory" label="Tambah kategori"><Fields /></MutationForm></section>
-    {categories.length > 0 && <div className="account-grid">{(["EXPENSE", "INCOME"] as const).map((type) => {
-      const group = categories.filter((category) => category.transactionType === type);
-      return <section className="account-card" key={type}><h2>{type === "INCOME" ? "Pendapatan" : "Perbelanjaan"}</h2>
-        {group.length === 0 && <p>Belum ada kategori.</p>}
-        {group.map((category) => <section key={category.id} aria-label={`Kategori ${category.name}`}>
-          <details className="category-editor"><summary>{category.name}</summary>
-            <MutationForm operation="updateCategory" id={category.id}><Fields name={category.name} type={category.transactionType} /></MutationForm>
-            <MutationForm operation="deleteCategory" id={category.id} label="Padam kategori" destructive />
-          </details>
-        </section>)}
-      </section>;
-    })}</div>}
-    {!categories.length && <p>Belum ada kategori. Tambah satu untuk mula merekod.</p>}
+    <header className="workspace-heading">
+      <h1 className="account-title">Kategori</h1>
+      <a className="button" href="#tambah-kategori"><Icon name="plus" size={17} />Tambah kategori</a>
+    </header>
+    <div className="manage-layout">
+      <div className="manage-records">
+        {(["EXPENSE", "INCOME"] as const).map((type) => {
+          const group = categories.filter((category) => category.transactionType === type);
+          const title = type === "INCOME" ? "Pendapatan" : "Perbelanjaan";
+          return <section className="account-card" key={type} aria-label={title}>
+            <h2>{title}</h2>
+            {group.length ? group.map((category) => <section key={category.id} aria-label={`Kategori ${category.name}`}>
+              <details className="category-editor"><summary>{category.name}</summary>
+                <MutationForm operation="updateCategory" id={category.id}><Fields name={category.name} type={category.transactionType} /></MutationForm>
+                <MutationForm operation="deleteCategory" id={category.id} label="Padam kategori" destructive />
+              </details>
+            </section>) : <p>Belum ada kategori.</p>}
+          </section>;
+        })}
+      </div>
+      <section className="account-card manage-create" id="tambah-kategori" tabIndex={-1}>
+        <h2>Tambah kategori</h2>
+        <MutationForm operation="createCategory" label="Tambah kategori"><Fields /></MutationForm>
+      </section>
+    </div>
   </>;
 }

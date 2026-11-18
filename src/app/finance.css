@@ -1,15 +1,9 @@
 .finance-nav { display: flex; flex-wrap: wrap; gap: 2px 6px; padding: 6px; border: 1px solid var(--line); background: #efefea; border-radius: 12px; }
 .finance-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 9px 18px; border-radius: 8px; font-size: 14px; font-weight: 650; }
 .finance-nav a:hover { background: #e1e5df; }
-.app-nav a { gap: 8px; }
 .finance-nav a[aria-current="page"] { background: var(--ink); color: white; }
 .account-main > .account-card { margin-block: 22px; }
 .account-main > .account-grid { align-items: start; }
-.dashboard-heading { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px 24px; margin-bottom: 22px; }
-.dashboard-heading .account-title { flex: 1 1 360px; font-size: clamp(32px, 3.3vw, 49px); }
-.dashboard-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
-.dashboard-tools .filter-form { margin: 0; }
-.dashboard-tools .filter-form .button { background: var(--surface); color: var(--ink); border-color: #a9b8b6; }
 .account-grid.analytics-grid { align-items: stretch; grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr); }
 .analytics-grid > .account-card { display: flex; flex-direction: column; }
 .analytics-grid > .account-card > :is(h2, h3) { margin-bottom: 18px; font-size: 18px; }
@@ -36,8 +30,6 @@
 .record-amount { text-align: end; font-variant-numeric: tabular-nums; }
 .record-amount[data-type="INCOME"] strong { color: var(--green); }
 .empty-state { padding-block: 22px; color: var(--muted); }
-.category-list { display: flex; flex-wrap: wrap; gap: 7px; }
-.category-list li { font-size: 13px; padding: 5px 10px; border-radius: 6px; background: #eaf0eb; }
 .budget-status { --bar: #39715d; font-size: 14px; margin-block: 12px; }
 .budget-usage { display: flex; align-items: baseline; gap: 6px; color: var(--muted); font-size: 12px; }
 .budget-usage strong { color: var(--bar); font-size: 26px; font-weight: 650; letter-spacing: -.045em; line-height: 1.2; }
@@ -102,8 +94,6 @@ details summary { min-height: 44px; align-content: center; color: #285663; font-
   .demo-budget-grid { grid-template-columns: 1fr; }
   .finance-nav { gap: 2px; }
   .finance-nav a { padding-inline: 11px; font-size: 13px; }
-  .app-nav { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
-  .app-nav a { flex-direction: column; justify-content: center; gap: 5px; padding: 7px 0; font-size: 12px; }
   .demo-main { padding-top: 0; }
   .demo-banner { background-image: linear-gradient(90deg, #102d36f7, #102d36bb), url("/senja-kl.webp"); }
 }

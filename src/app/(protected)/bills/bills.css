@@ -1,0 +1,20 @@
+.bill-list { padding: 0; }
+.bill-list > .bill-group-heading { margin: 0; padding: 16px clamp(16px, 2.2vw, 26px); border-bottom: 1px solid var(--line); }
+.bill-group-heading:not(:first-child) { border-top: 1px solid var(--line); }
+.bill-group-heading#tertunggak { color: #884027; }
+.bill-record { padding: 16px clamp(16px, 2.2vw, 26px); }
+.bill-record + .bill-record { border-top: 1px solid var(--line); }
+.bill-record-heading { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 40%); gap: 10px; }
+.bill-record-heading h3 { margin: 0 0 4px; font-size: 18px; }
+.bill-record-heading p, .bill-record-actions p { color: var(--muted); font-size: 13px; }
+.bill-record-heading > strong { text-align: right; font-size: 18px; font-variant-numeric: tabular-nums; }
+.bill-record-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; margin-top: 8px; }
+.bill-record-actions time { font-weight: 650; }
+.bill-record-actions .quiet-button { padding-inline: 11px; gap: 7px; font-size: 13px; }
+.bill-editor { margin-top: 6px; }
+.bill-editor[open] { padding-bottom: 4px; }
+.bill-editor .finance-form:first-of-type { margin-top: 4px; }
+@media (min-width: 360px) {
+  .bill-create .entry-form fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 10px; }
+  .bill-create .entry-form fieldset > :not(.bill-short-field) { grid-column: 1 / -1; }
+}

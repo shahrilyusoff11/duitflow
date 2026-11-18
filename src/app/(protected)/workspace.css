@@ -1,0 +1,85 @@
+.workspace-header {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.workspace-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 20px;
+  min-height: 72px;
+}
+.workspace-bar .signout-control { justify-self: end; }
+.workspace-bar .quiet-button { font-size: 13px; padding-inline: 13px; }
+.workspace-nav { display: flex; gap: 3px; }
+.workspace-nav a {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  border-radius: 8px;
+  padding-inline: 11px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.workspace-nav a:hover { background: #f1f3ed; color: var(--ink); }
+.workspace-nav a[aria-current="page"] { background: #e2ede4; color: #235440; }
+.workspace-main { min-height: calc(100svh - 73px); padding-block: clamp(24px, 4vw, 48px) 64px; scroll-margin-top: 90px; }
+.workspace-main .account-title { font-size: clamp(34px, 4.2vw, 55px); }
+.workspace-main :where([id], a, button, input, select, summary) { scroll-margin-top: 90px; }
+.workspace-main > .account-card { max-width: 780px; }
+.workspace-heading {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px 24px;
+  margin-bottom: 22px;
+}
+.workspace-tools { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.workspace-tools .filter-form { margin: 0; gap: 8px; }
+.workspace-tools .filter-form .button { background: var(--surface); color: var(--ink); border-color: #a9b8b6; }
+.workspace-tools .filter-form .button:hover { background: #e9eee6; }
+.workspace-tools :is(.button, .quiet-button) { min-height: 46px; }
+.workspace-main .button svg { flex: none; }
+.manage-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+.manage-records, .settings-layout { display: grid; align-items: start; gap: 16px; min-width: 0; }
+.manage-create .entry-form fieldset { display: flex; align-items: stretch; }
+.manage-create .entry-form button { width: 100%; }
+.settings-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.ai-settings { grid-column: 1 / -1; }
+.ai-settings > p { max-width: 90ch; }
+.settings-profile { display: grid; gap: 10px; }
+.settings-profile > div { padding-top: 10px; border-top: 1px solid var(--line); }
+.settings-profile dt { color: var(--muted); font-size: 13px; }
+.settings-profile dd { font-weight: 650; }
+.settings-guide { margin-top: 14px; border-top: 1px solid var(--line); }
+.settings-guide[open] { padding-bottom: 8px; }
+
+@media (max-width: 1060px) {
+  .workspace-bar { grid-template-columns: 1fr 1fr; gap: 4px 16px; padding-block: 4px 8px; }
+  .workspace-nav { grid-column: 1 / -1; grid-row: 2; justify-content: space-between; }
+  .workspace-nav a { flex: 1; }
+  .workspace-main { scroll-margin-top: 116px; }
+  .workspace-main :where([id], a, button, input, select, summary) { scroll-margin-top: 116px; }
+}
+@media (max-width: 720px) {
+  .workspace-bar { width: calc(100% - 24px); }
+  .workspace-bar .brand, .workspace-bar .signout-control { margin-inline: 6px; }
+  .workspace-nav { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 2px; }
+  .workspace-nav a { flex-direction: column; min-height: 49px; gap: 3px; padding-inline: 0; font-size: clamp(10px, 2.7vw, 12px); }
+  .workspace-main { padding-bottom: 42px; scroll-margin-top: 120px; }
+  .workspace-main :where([id], a, button, input, select, summary) { scroll-margin-top: 120px; }
+  .manage-layout, .settings-layout { grid-template-columns: 1fr; }
+}

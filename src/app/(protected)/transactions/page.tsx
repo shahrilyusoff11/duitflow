@@ -29,14 +29,14 @@ export default async function TransactionsPage({ searchParams }: { searchParams:
     return <p role="alert">{invalidFiltersMessage} <Link className="text-link" href="/transactions">Tetapkan semula</Link></p>;
   }
   return <>
-    <header className="transactions-title"><h1 className="account-title">Transaksi</h1><a className="inline-link" href="#rekod">Lihat rekod <Icon name="down" size={16} /></a></header>
+    <header className="workspace-heading transactions-title"><h1 className="account-title">Transaksi</h1><a className="inline-link" href="#rekod">Lihat rekod <Icon name="down" size={16} /></a></header>
     <div className="transactions-layout">
-      <section className="transaction-entry" id="tambah" aria-labelledby="entry-heading">
+      <section className="transaction-entry" id="tambah" tabIndex={-1} aria-labelledby="entry-heading">
         <header><span className="entry-icon"><Icon name="book" size={20} /></span><h2 id="entry-heading">Tambah transaksi</h2></header>
         {categories.length ? <MutationForm operation="createTransaction" label="Tambah transaksi"><TransactionFields categories={categories} /></MutationForm> :
           <p className="entry-no-categories"><Link className="text-link" href="/categories">Tambah kategori dahulu</Link></p>}
       </section>
-      <section className="transaction-records" id="rekod" aria-labelledby="records-heading">
+      <section className="transaction-records" id="rekod" tabIndex={-1} aria-labelledby="records-heading">
         <header className="records-heading"><h2 id="records-heading">Rekod anda</h2><span>{result.total} rekod</span></header>
         <details className="record-filters" key={pageHref(result.page)} open={filtered || undefined}>
           <summary><Icon name="settings" size={17} />Cari dan tapis <Icon name="chevron" size={15} /></summary>

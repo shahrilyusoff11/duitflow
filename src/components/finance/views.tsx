@@ -2,6 +2,7 @@ import { Decimal, formatMyr } from "@/lib/finance/money";
 import { todayInMalaysia } from "@/lib/finance/dates";
 import type { listBudgets, listCategories } from "@/lib/finance/dal";
 import { TypeCategoryFields } from "./type-category-fields";
+import { InteractiveTrendPlot, type TrendPoint } from "./interactive-trend-plot";
 
 export type Categories = Awaited<ReturnType<typeof listCategories>>;
 
@@ -32,27 +33,45 @@ export function MonthPicker({ period }: { period: string }) {
   return <form className="filter-form" method="get"><label>Bulan<input name="month" type="month" defaultValue={period} min="2000-01" max="2100-12" required /></label><button className="button">Papar</button></form>;
 }
 
-export function BudgetStatus({ budget }: { budget: Awaited<ReturnType<typeof listBudgets>>[number] }) {
+export function BudgetStatus({ budget, compact = false }: { budget: Awaited<ReturnType<typeof listBudgets>>[number]; compact?: boolean }) {
   return <div className="budget-status" data-status={budget.status}>
     <div className="budget-usage"><strong>{budget.percent}%</strong><span>digunakan</span></div>
     <progress aria-label={`Penggunaan bajet ${budget.categoryName}`} max={100} value={budget.bar} />
     <p>{formatMyr(budget.spent)} daripada {formatMyr(budget.limitAmount)}</p>
     <p className="budget-remaining"><span>Baki</span><strong>{formatMyr(budget.remaining)}</strong></p>
-    <p className={budget.status === "OK" ? "" : "budget-warning"}>{budget.status === "EXCEEDED" ? "Had bajet dicapai atau dilebihi (100%)." : budget.status === "WARNING" ? `Amaran: sekurang-kurangnya ${budget.warningAt}% telah digunakan.` : `Amaran bermula pada ${budget.warningAt}%.`}</p>
+    {(!compact || budget.status !== "OK") && <p className={budget.status === "OK" ? "" : "budget-warning"}>{budget.status === "EXCEEDED" ? "Had bajet dicapai atau dilebihi (100%)." : budget.status === "WARNING" ? `Amaran: sekurang-kurangnya ${budget.warningAt}% telah digunakan.` : `Amaran bermula pada ${budget.warningAt}%.`}</p>}
   </div>;
 }
 
-export function TrendChart({ rows }: { rows: { month: string; income: string; expense: string }[] }) {
+const shortMonth = new Intl.DateTimeFormat("ms-MY", { month: "short", timeZone: "UTC" });
+const fullMonth = new Intl.DateTimeFormat("ms-MY", { month: "long", year: "numeric", timeZone: "UTC" });
+
+export function TrendChart({ rows, interactive = false }: { rows: { month: string; income: string; expense: string }[]; interactive?: boolean }) {
   const maximum = rows.reduce((max, row) => Decimal.max(max, row.income, row.expense), new Decimal(0));
   const height = (value: string) => `${new Decimal(value).div(maximum).mul(100).toFixed(2)}%`;
-  const monthLabel = new Intl.DateTimeFormat("ms-MY", { month: "short", timeZone: "UTC" });
+  const points: TrendPoint[] = maximum.isZero() ? [] : rows.map((row) => {
+    const date = new Date(`${row.month}-01T00:00:00Z`);
+    return {
+      month: row.month,
+      label: shortMonth.format(date),
+      period: fullMonth.format(date),
+      income: formatMyr(row.income),
+      expense: formatMyr(row.expense),
+      incomeHeight: height(row.income),
+      expenseHeight: height(row.expense),
+    };
+  });
   return <figure className="trend-chart"><figcaption className="legend"><span>Pendapatan</span><span>Perbelanjaan</span></figcaption>
-    {maximum.isZero() ? <p className="chart-empty">Belum ada transaksi dalam tempoh enam bulan ini.</p> :
-    <div className="chart-frame" aria-hidden="true"><div className="plot-scale"><span>{formatMyr(maximum.toFixed(2))}</span><span>RM 0</span></div>
-    <div className="plot">{rows.map((row) => <div key={row.month} className="plot-month">
-      <div className="plot-pair"><i style={{ height: height(row.income) }} /><i style={{ height: height(row.expense) }} /></div>
-      <span>{monthLabel.format(new Date(`${row.month}-01T00:00:00Z`))}</span>
-    </div>)}</div></div>}
+    {points.length ? (
+      <div className="chart-frame">
+        <div className="plot-scale" aria-hidden="true"><span>{formatMyr(maximum.toFixed(2))}</span><span>RM 0</span></div>
+        {interactive ? <InteractiveTrendPlot points={points} /> :
+          <div className="plot" aria-hidden="true">{points.map((point) => <div key={point.month} className="plot-month">
+            <div className="plot-pair"><i style={{ height: point.incomeHeight }} /><i style={{ height: point.expenseHeight }} /></div>
+            <span>{point.label}</span>
+          </div>)}</div>}
+      </div>
+    ) : <p className="chart-empty">Belum ada transaksi dalam tempoh enam bulan ini.</p>}
     <details className="chart-data"><summary>Lihat angka bulanan</summary><table>
       <caption className="sr-only">Pendapatan dan perbelanjaan mengikut bulan</caption>
       <thead><tr><th scope="col">Bulan</th><th scope="col">Pendapatan</th><th scope="col">Perbelanjaan</th></tr></thead>

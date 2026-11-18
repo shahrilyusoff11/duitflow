@@ -17,7 +17,10 @@ export default async function TransactionPage({ params }: { params: Promise<{ id
   catch (error) { if (error instanceof FinanceError && error.code === "NOT_FOUND") notFound(); throw error; }
   const categories = await listCategories(user.id);
   return <>
-    <Link className="text-link" href="/transactions">← Semua transaksi</Link><h1 className="account-title">Butiran transaksi</h1>
+    <header className="workspace-heading">
+      <h1 className="account-title">Butiran transaksi</h1>
+      <Link className="inline-link" href="/transactions">← Semua transaksi</Link>
+    </header>
     <section className="account-card"><h2>{transaction.description}</h2><p>{formatMyr(transaction.amount)} · {displayDate(transaction.occurredOn)} · {transaction.categoryName}</p>
       <p>Sumber: {transaction.source === "WEB" ? "Web" : "Telegram"}</p>
       <p>Dicipta: <time dateTime={transaction.createdAt}>{new Intl.DateTimeFormat("ms-MY", { timeZone: "Asia/Kuala_Lumpur", dateStyle: "medium", timeStyle: "short" }).format(new Date(transaction.createdAt))}</time></p>

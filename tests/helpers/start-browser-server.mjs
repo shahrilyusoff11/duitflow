@@ -60,6 +60,20 @@ try {
     await embedded.query(`INSERT INTO "Session" ("id", "token", "userId", "expiresAt", "updatedAt") VALUES ($1, $2, $3, now() + interval '1 hour', now())`,
       [`browser-session-${project}`, `browser-token-${project}`, `browser-${project}`]);
   }
+  for (const device of ["desktop", "mobile"]) {
+    const userId = `browser-activity-${device}`;
+    await embedded.query(`INSERT INTO "Budget" ("id", "userId", "categoryId", "year", "month", "limitAmount", "updatedAt") VALUES
+      ($1 || ':budget-food', $1, $1 || ':default:food', 2026, 8, 15, now()),
+      ($1 || ':budget-home', $1, $1 || ':default:home', 2026, 8, 100, now())`, [userId]);
+    await embedded.query(`
+      INSERT INTO "RecurringBill" ("id", "userId", "categoryId", "name", "amount", "cadence", "nextDueOn", "dayOfMonth", "updatedAt")
+      SELECT $1 || ':bill:' || offset_days, $1, $1 || ':default:bills', name, amount, 'YEARLY',
+             due_on, extract(day from due_on), now()
+      FROM (VALUES ('Ansuran kereta', 720, 2), ('Internet rumah', 139, 5),
+                   ('Bil elektrik', 125.50, 9), ('Insurans kenderaan', 1050, 21)) AS bills(name, amount, offset_days)
+      CROSS JOIN LATERAL (SELECT (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date + offset_days AS due_on) AS schedule
+    `, [userId]);
+  }
   for (const [device, telegramUserId] of [["desktop", "900000001"], ["mobile", "900000002"]]) {
     await embedded.query(`INSERT INTO "TelegramConnection" ("id", "userId", "telegramUserId") VALUES ($1, $2, $3)`,
       [`browser-telegram-connection-${device}`, `browser-telegram-linked-${device}`, telegramUserId]);

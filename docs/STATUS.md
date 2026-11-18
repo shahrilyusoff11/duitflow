@@ -8,6 +8,23 @@ smoke checks. Approved real auth and synthetic finance/bot writes occurred;
 no schema migration, new application dependency or paid service was introduced in Phase 5.
 The hosted release offers DeepSeek Flash with per-user opt-in.
 
+## Signed-in workspace refresh — 18 November 2026
+
+- The main navigation includes **Bil** on desktop and mobile. The bill list
+  groups overdue, scheduled, and paused bills. The dashboard links directly
+  to overdue bills and still shows the rolling 30-day forecast.
+- The dashboard groups monthly totals, recent records, bills, and budgets.
+  The trend chart follows recent activity even when the bills column grows.
+  Hovering, tapping, or focusing a month on the dashboard shows its exact income
+  and expense values in MYR. The monthly figures table remains available.
+  The forecast shows three payments first and expands to the full 30-day list.
+  Settings contains account details alongside Telegram and AI options.
+- Local lint, typecheck, production build, 338 unit/integration tests, and 34
+  desktop/mobile browser tests passed. Browser coverage includes the active
+  bill tab on the payment page, the overdue link, and chart values on desktop
+  and at 320 px.
+  These results apply to the local checkout.
+
 ## Telegram and DeepSeek privacy hardening — 18 November 2026
 
 - [x] Optional DeepSeek requests use validated app-owned words and generic

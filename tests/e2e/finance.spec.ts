@@ -122,7 +122,7 @@ test("finance pages independently reject anonymous access", async ({ page }) => 
   }
 });
 
-test("dashboard activity shows five linked records and an empty budget for the selected month", async ({ page, context }, testInfo) => {
+test("populated dashboard keeps activity, trend, bills and budgets usable", async ({ page, context }, testInfo) => {
   const device = testInfo.project.name.startsWith("mobile") ? "mobile" : "desktop";
   const cookie = fixtureSessionCookie(`browser-token-activity-${device}`, "synthetic-browser-test-secret-at-least-32-characters");
   const separator = cookie.indexOf("=");
@@ -155,9 +155,60 @@ test("dashboard activity shows five linked records and an empty budget for the s
   await expect(ledger.getByRole("listitem")).toHaveCount(5);
   await expect(ledger.getByRole("listitem").first()).toContainText("−RM 48.50");
   await expect(ledger.getByRole("listitem").last()).toContainText("+RM 3,000.00");
-  await expect(activity.getByRole("link", { name: "Tetapkan bajet" })).toHaveAttribute("href", "/budgets?month=2026-08");
+  const trend = activity.getByRole("region", { name: "Trend enam bulan" });
+  const bills = activity.getByRole("region", { name: "Bil akan datang" });
+  const budgets = activity.getByRole("region", { name: "Bajet bulanan" });
+  await expect(budgets.getByRole("link", { name: "Urus bajet" })).toHaveAttribute("href", "/budgets?month=2026-08");
+  await expect(budgets.getByText("93.3%")).toBeVisible();
+  await expect(budgets.getByText(/sekurang-kurangnya 80%/)).toBeVisible();
+  await expect(bills.getByText("RM 2,034.50", { exact: true })).toBeVisible();
+  await expect(bills.getByRole("link", { name: "Rekod bayaran Ansuran kereta" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
-  await activity.screenshot({ path: testInfo.outputPath("dashboard-activity.png") });
+  await page.screenshot({ path: testInfo.outputPath("dashboard-activity.png"), fullPage: true });
+
+  // Additional forecasts should not hold the chart below the left column.
+  const moreBills = bills.getByText("Lihat 1 lagi", { exact: true });
+  await expect(bills.getByText("Insurans kenderaan", { exact: true })).toBeHidden();
+  await moreBills.press("Enter");
+  await expect(bills.getByRole("link", { name: "Rekod bayaran Insurans kenderaan" })).toBeVisible();
+  const trendGap = await trend.evaluate((chart) => {
+    const recent = chart.previousElementSibling;
+    if (recent?.getAttribute("aria-labelledby") !== "recent-title") throw new Error("Expected the chart below recent transactions");
+    return chart.getBoundingClientRect().top - recent.getBoundingClientRect().bottom;
+  });
+  expect(trendGap).toBeGreaterThan(0);
+  expect(trendGap).toBeLessThan(32);
+  await moreBills.press("Enter");
+  if (device === "mobile") {
+    await page.setViewportSize({ width: 320, height: 720 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  }
+
+  const august = trend.getByRole("button", { name: /Ogos 2026, pendapatan RM 3,000.00, perbelanjaan RM 90.90/ });
+  const july = trend.getByRole("button", { name: /Julai 2026/ });
+  const chartValues = trend.locator(".plot-values");
+  await expect(chartValues).toBeHidden();
+  if (device === "mobile") await august.tap();
+  else await august.hover();
+  await expect(chartValues).toContainText("Ogos 2026");
+  await expect(chartValues).toContainText("RM 3,000.00");
+  await expect(chartValues).toContainText("RM 90.90");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
+  await trend.screenshot({ path: testInfo.outputPath("chart-values.png") });
+
+  if (device === "mobile") await july.tap();
+  else await july.hover();
+  await expect(chartValues).toContainText("Julai 2026");
+  await expect(chartValues.getByText("RM 0.00", { exact: true })).toHaveCount(2);
+  if (device === "desktop") {
+    await page.keyboard.press("Escape");
+    await expect(chartValues).toBeHidden();
+    await august.focus();
+    await expect(chartValues).toContainText("Ogos 2026");
+    await page.keyboard.press("Escape");
+    await expect(chartValues).toBeHidden();
+  }
+
   await ledger.getByRole("link", { name: /Barang dapur contoh/ }).press("Enter");
   await expect(page.getByRole("heading", { name: "Butiran transaksi" })).toBeVisible();
 });

@@ -1,8 +1,9 @@
 const paths = {
   wallet: "M3 8V6a2 2 0 0 1 2-2h12v4M3 8h16a2 2 0 0 1 2 2v9a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V8Zm18 4h-5a2 2 0 0 0 0 4h5",
-  user: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2",
   chevron: "m6 9 6 6 6-6",
   arrow: "M4 12h15m-6-6 6 6-6 6",
+  plus: "M12 5v14M5 12h14",
+  receipt: "M5 3l2 2 2-2 3 2 3-2 2 2 2-2v18l-2-2-2 2-3-2-3 2-2-2-2 2V3Zm4 6h6m-6 4h6",
   outward: "M5 19 18 6M7 6h11v11",
   down: "M12 4v15m-6-6 6 6 6-6",
   income: "M18 5 6 17m0-9v9h9",

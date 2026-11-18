@@ -93,7 +93,8 @@ sessions**: see [the auth decision](docs/AUTH_PROPOSAL.md) and
 | Public demo | Immutable synthetic snapshot isolated from real accounts and provider calls |
 
 Recorded net means income minus recorded expenses for the selected period.
-Open **Bil akan datang → Urus bil** to plan recurring bills. **Rekod bayaran**
+Open the **Bil** tab to see overdue, scheduled, and paused bills. The dashboard
+shows a 30-day forecast with a link to the bill list. **Rekod bayaran**
 prefills the bill's name, amount, and today's payment date. Confirming records
 the actual expense and moves the bill's next due date forward. Planned bills
 stay out of spending totals until a payment is confirmed.
