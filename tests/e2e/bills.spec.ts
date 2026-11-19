@@ -81,3 +81,34 @@ test("dashboard shows a recurring bill and confirmation records its actual payme
     expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
   }
 });
+
+test("a finite schedule completes on the last payment and reopens when its expense is undone", async ({ page, context }, testInfo) => {
+  const device = testInfo.project.name.startsWith("mobile") ? "mobile" : "desktop";
+  const cookie = fixtureSessionCookie(`browser-token-finite-bills-${device}`, "synthetic-browser-test-secret-at-least-32-characters");
+  const separator = cookie.indexOf("=");
+  await context.addCookies([{ name: cookie.slice(0, separator), value: cookie.slice(separator + 1), url: "http://127.0.0.1:3100", httpOnly: true, sameSite: "Lax" }]);
+  await page.goto("/bills");
+  const bill = page.getByRole("region", { name: "Bil Synthetic installment", exact: true });
+  await expect(bill).toContainText("Ansuran · 1/2 dibayar");
+  const pay = bill.getByRole("link", { name: "Rekod bayaran" });
+  await pay.click();
+  await expect(page.getByRole("heading", { name: "Rekod bayaran", exact: true })).toBeVisible();
+  await expect(page.getByText(/Ansuran · 1\/2 dibayar/)).toBeVisible();
+  await page.getByRole("button", { name: "Sahkan bayaran" }).click();
+  await expect(page).toHaveURL(/\/transactions\/[^/]+$/);
+  await expect(page.getByRole("heading", { name: "Synthetic installment", exact: true })).toBeVisible();
+  const paymentUrl = page.url();
+  await page.goto("/bills");
+  await expect(page.getByRole("heading", { name: "Selesai", exact: true })).toBeVisible();
+  await expect(bill).toContainText("2/2 dibayar");
+  await expect(pay).toHaveCount(0);
+
+  await page.goto(paymentUrl);
+  await page.getByRole("button", { name: "Padam transaksi", exact: true }).click();
+  await page.getByRole("button", { name: "Sahkan padam", exact: true }).click();
+  await expect(page).toHaveURL(/\/transactions$/);
+  await page.goto("/bills");
+  await expect(bill).toContainText("1/2 dibayar");
+  await expect(pay).toBeVisible();
+  await expect(bill.locator("time")).toHaveAttribute("datetime", todayInMalaysia());
+});

@@ -22,6 +22,7 @@ const environment = {
   TELEGRAM_BOT_TOKEN: "123456:synthetic-telegram-token-longer-than-twenty",
   TELEGRAM_WEBHOOK_SECRET: "synthetic-telegram-webhook-secret-longer-than32",
   TELEGRAM_BOT_USERNAME: "DuitFlowTestBot",
+  CRON_SECRET: "synthetic-browser-cron-secret-longer-than32",
   AI_PROVIDER: "deterministic", DEEPSEEK_API_KEY: "",
   DEEPSEEK_MODEL: "deepseek-flash", AI_DAILY_LIMIT_PER_USER: "30", AI_MINUTE_LIMIT_PER_USER: "2",
   NEXT_TELEMETRY_DISABLED: "1", VERCEL: "",
@@ -54,13 +55,20 @@ try {
   });
   if (migrationCode !== 0) throw new Error("Browser test migration failed");
 
-  for (const project of ["desktop", "mobile", "finance-desktop", "finance-mobile", "activity-desktop", "activity-mobile", "bills-desktop", "bills-mobile", "telegram-desktop", "telegram-mobile", "telegram-linked-desktop", "telegram-linked-mobile", "telegram-confirm-desktop", "telegram-confirm-mobile", "ai-desktop", "ai-mobile"]) {
+  for (const project of ["desktop", "mobile", "finance-desktop", "finance-mobile", "activity-desktop", "activity-mobile", "bills-desktop", "bills-mobile", "finite-bills-desktop", "finite-bills-mobile", "telegram-desktop", "telegram-mobile", "telegram-linked-desktop", "telegram-linked-mobile", "telegram-confirm-desktop", "telegram-confirm-mobile", "ai-desktop", "ai-mobile"]) {
     await embedded.query(`INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES ($1, $2, $3, now())`,
       [`browser-${project}`, `${project === "desktop" ? "Desktop" : "Mobile"} Test`, `${project}@example.test`]);
     await embedded.query(`INSERT INTO "Session" ("id", "token", "userId", "expiresAt", "updatedAt") VALUES ($1, $2, $3, now() + interval '1 hour', now())`,
       [`browser-session-${project}`, `browser-token-${project}`, `browser-${project}`]);
   }
   for (const device of ["desktop", "mobile"]) {
+    const finiteBillOwner = `browser-finite-bills-${device}`;
+    await embedded.query(`
+      INSERT INTO "RecurringBill" ("id", "userId", "categoryId", "name", "amount", "cadence", "nextDueOn", "dayOfMonth", "paymentLimit", "paymentsMade", "updatedAt")
+      SELECT $1 || '-finite', $1, $1 || ':default:bills', 'Synthetic installment', 55, 'MONTHLY',
+             due_on, extract(day from due_on), 2, 1, now()
+      FROM (SELECT (now() AT TIME ZONE 'Asia/Kuala_Lumpur')::date AS due_on) AS schedule
+    `, [finiteBillOwner]);
     const userId = `browser-activity-${device}`;
     await embedded.query(`INSERT INTO "Budget" ("id", "userId", "categoryId", "year", "month", "limitAmount", "updatedAt") VALUES
       ($1 || ':budget-food', $1, $1 || ':default:food', 2026, 8, 15, now()),

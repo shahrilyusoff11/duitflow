@@ -73,6 +73,10 @@ export async function cleanupTelegramState(): Promise<void> {
     WHERE "financeTopicExpiresAt" <= now() AND "id" IN (
       SELECT "id" FROM "TelegramConnection" WHERE "financeTopicExpiresAt" <= now() LIMIT 100
     )`;
+  await database.$executeRaw`UPDATE "TelegramConnection" SET "recordContext" = NULL
+    WHERE "recordContextExpiresAt" <= now() AND "id" IN (
+      SELECT "id" FROM "TelegramConnection" WHERE "recordContextExpiresAt" <= now() AND "recordContext" IS NOT NULL LIMIT 100
+    )`;
   await database.$executeRaw`DELETE FROM "RateLimitEvent" WHERE "id" IN (
     SELECT "id" FROM "RateLimitEvent" WHERE "bucket" LIKE 'telegram:%' AND "createdAt" < now() - interval '1 minute' LIMIT 300
   )`;

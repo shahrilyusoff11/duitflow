@@ -4,6 +4,7 @@ import { requirePageUser } from "@/lib/auth/session";
 import { getBill } from "@/lib/finance/dal";
 import { displayDate, todayInMalaysia } from "@/lib/finance/dates";
 import { idSchema } from "@/lib/finance/validation";
+import { billScheduleLabel } from "@/lib/finance/bill-schedule";
 import { MutationForm } from "@/components/finance/mutation-form";
 import { TransactionDetailsFields } from "@/components/finance/views";
 
@@ -18,12 +19,12 @@ export default async function BillPaymentPage({ params }: { params: Promise<{ id
   return <>
     <header className="workspace-heading">
       <h1 className="account-title">Rekod bayaran</h1>
-      <Link className="inline-link" href="/bills">← Bil berulang</Link>
+      <Link className="inline-link" href="/bills">← Bil dan ansuran</Link>
     </header>
     <section className="account-card" aria-labelledby="payment-heading">
       <h2 id="payment-heading">{bill.name}</h2>
-      <p>Tarikh bil <time dateTime={bill.nextDueOn}>{displayDate(bill.nextDueOn)}</time> · {bill.categoryName}</p>
-      <p>Semak amaun dan tarikh bayaran sebenar. Pengesahan ini menambah satu perbelanjaan dan mengemas kini tarikh bil seterusnya.</p>
+      <p>Tarikh bil <time dateTime={bill.nextDueOn}>{displayDate(bill.nextDueOn)}</time> · {bill.categoryName} · {billScheduleLabel(bill)}</p>
+      <p>Semak amaun dan tarikh bayaran sebenar. Pengesahan ini menambah satu perbelanjaan dan mengemas kini jadual bil.</p>
       <MutationForm operation="recordBillPayment" id={bill.id} version={bill.version} label="Sahkan bayaran">
         <TransactionDetailsFields value={{ amount: bill.amount, description: bill.name, occurredOn: todayInMalaysia() }} />
       </MutationForm>

@@ -7,6 +7,7 @@ let database: PGlite;
 const migrationRoot = join(process.cwd(), "prisma", "migrations");
 const telegramPrivacyMigration = "20261118000002_telegram_privacy";
 const telegramFinanceTopicMigration = "20261119000000_telegram_finance_topic";
+const telegramFinanceToolsMigration = "20261119000001_telegram_finance_tools";
 
 async function applyMigrations(target: PGlite, before?: string) {
   const directories = await readdir(migrationRoot, { withFileTypes: true });
@@ -51,6 +52,36 @@ function insertBudget(categoryId: string, type: string, month = 11) {
 }
 
 describe("reviewed PostgreSQL migrations", () => {
+  it("preserves legacy accounts, schedules and expenses while defaulting notifications off and tracking new payments", async () => {
+    const upgrade = await PGlite.create();
+    try {
+      await applyMigrations(upgrade, telegramFinanceToolsMigration);
+      await upgrade.exec(`
+        INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES
+          ('legacy', 'Legacy Test', 'legacy@example.test', now());
+        INSERT INTO "TelegramConnection" ("id", "userId", "telegramUserId") VALUES ('legacy-link', 'legacy', '123456');
+        INSERT INTO "RecurringBill" ("id", "userId", "categoryId", "name", "amount", "cadence", "nextDueOn", "dayOfMonth", "updatedAt")
+          VALUES ('legacy-bill', 'legacy', 'legacy:default:bills', 'Synthetic bill', 50, 'MONTHLY', '2026-12-01', 1, now());
+        INSERT INTO "Transaction" ("id", "userId", "categoryId", "type", "amount", "description", "occurredOn", "updatedAt")
+          VALUES ('legacy-expense', 'legacy', 'legacy:default:bills', 'EXPENSE', 50, 'Synthetic expense', '2026-11-01', now());
+      `);
+      await upgrade.exec(await readFile(join(migrationRoot, telegramFinanceToolsMigration, "migration.sql"), "utf8"));
+      expect((await upgrade.query('SELECT "billReminderDays", "budgetReminderPercent", "weeklyDigestDay", "recordContext" FROM "TelegramConnection"')).rows)
+        .toEqual([{ billReminderDays: null, budgetReminderPercent: null, weeklyDigestDay: null, recordContext: null }]);
+      expect((await upgrade.query('SELECT "active", "completed", "paymentsMade", "paymentLimit" FROM "RecurringBill"')).rows)
+        .toEqual([{ active: true, completed: false, paymentsMade: 0, paymentLimit: null }]);
+      await upgrade.exec(`
+        INSERT INTO "Transaction" ("id", "userId", "categoryId", "type", "amount", "description", "occurredOn", "updatedAt")
+          VALUES ('new-expense', 'legacy', 'legacy:default:bills', 'EXPENSE', 50, 'Synthetic expense', '2026-11-02', now());
+      `);
+      expect((await upgrade.query('SELECT "paymentTrackingKnown" FROM "Transaction" ORDER BY "id"')).rows)
+        .toEqual([{ paymentTrackingKnown: false }, { paymentTrackingKnown: true }]);
+      await expect(upgrade.query('UPDATE "RecurringBill" SET "paymentLimit" = 0')).rejects.toMatchObject({ code: "23514" });
+      await expect(upgrade.query('UPDATE "TelegramConnection" SET "weeklyDigestDay" = 8')).rejects.toMatchObject({ code: "23514" });
+      await expect(upgrade.query(`UPDATE "Transaction" SET "billId" = 'legacy-bill' WHERE "id" = 'new-expense'`)).rejects.toMatchObject({ code: "23514" });
+    } finally { await upgrade.close(); }
+  });
+
   it("preserves existing Telegram links when adding optional financial conversation context", async () => {
     const upgrade = await PGlite.create();
     try {

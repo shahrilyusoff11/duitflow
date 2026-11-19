@@ -5,16 +5,19 @@ import { monthSchema } from "@/lib/finance/validation";
 import { approvePendingAction, cancelPendingAction, getActionForUpdate, getPendingAction, getTelegramBills, getTelegramBudgets, getTelegramCategories, getTelegramFinanceTopic, getTelegramReport, queryTelegramFinance, redeemLinkToken, replacePendingAction, resolveTelegramUser, setTelegramFinanceTopic, TelegramAccessError } from "./dal";
 import { clarificationQuestion, continueClarification, type TelegramCategory } from "./parser";
 import { answerCallbackQuery, sendMessage } from "./transport";
-import { billClarificationSchema, billPaymentClarificationSchema, pendingClarificationSchema, pendingProposalSchema, type BillProposal } from "./schemas";
+import { billClarificationSchema, billPaymentClarificationSchema, pendingClarificationSchema, pendingProposalSchema, transactionSelectionSchema, type BillProposal, type FinanceMutation, type RecordContext } from "./schemas";
 import { billQuestion, continueBillDraft, describeBillProposal, parseBillIntent, prepareBillDraft, readBillNameReply } from "./bills";
 import type { TelegramUpdate } from "./update";
 import { parseTransactionWithAi } from "@/lib/ai/parser";
 import { continueFinanceTopic, parseFinanceFollowup, parseFinanceQuestion } from "@/lib/ai/question";
 import { financeTopicQuerySchema } from "@/lib/ai/schemas";
 import { renderFinanceAnswer, renderMonthlyReport } from "@/lib/ai/render";
+import { describeFinanceMutation, describeNotifications, notificationChange, notificationHelp, parseBudgetChange, parseLedgerChange, recordReference } from "./finance-tools";
+import { findLedgerRecords, getNotificationSettings, proposeBudget, proposeLedgerChange, readRecordContext, rememberRecords } from "./records";
+import { asksWhySpendingChanged, explainSpendingChange } from "./spending-change";
 
 const linkInstructions = "Log masuk ke DuitFlow dan buka Tetapan > Telegram. Jana pautan, buka chat bot ini dan masukkan kod yang diberi dalam Tetapan. Pautan luput selepas 10 minit.";
-const help = "Cakap macam biasa dengan saya. Contohnya:\n• Analisis kewangan aku bulan ni\n• Kat mana aku boleh jimat?\n• Trend belanja tiga bulan\n• Boleh spend RM100 untuk makan?\n• Harini aku beli KFC RM20 dan karaoke 30\n• Bagi report perbelanjaan aku bulan ni\n• Bil terdekat apa?\n• Dah bayar bil ShopeePay RM30\n\n/balance — ringkasan bulan ini\n/budget — status bajet\n/report — laporan terperinci\n/bills — bil akan datang dan tertunggak\n/cancel — batal cadangan atau soalan\n/link — sambungkan akaun\nTekan Sahkan untuk menyimpan cadangan.";
+const help = "Cakap macam biasa dengan saya. Contohnya:\n• Harini aku beli KFC RM20 dan karaoke 30\n• Tukar KFC tadi kepada RM25\n• Undo catatan terakhir\n• Bajet makan bulan depan RM400\n• Kenapa belanja aku naik?\n• Analisis kewangan aku bulan ni\n• Boleh spend RM100 untuk makan?\n• Bil tiket RM70 sekali bayar esok\n• Ansuran laptop RM100 6 kali bayar bermula esok\n• Dah bayar bil yang tadi\n\n/balance — ringkasan bulan ini\n/budget — status bajet\n/report — laporan terperinci\n/bills — bil akan datang dan tertunggak\n/peringatan · /mingguan — tetapan penghantaran\n/cancel — batal cadangan atau soalan\n/link — sambungkan akaun\nTekan Sahkan untuk menyimpan cadangan.";
 const mealSmallTalk = /^(?:(?:kau|awak|anda|bot)\s+)?(?:dah|sudah)\s+makan(?:\s+(?:ke|kah|belum|tak)[.?!？]*|\s*[?？]+)$|^(?:have you eaten|did you eat)(?: yet)?[.?!？]*$/i;
 
 type Markup = { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> };
@@ -37,10 +40,28 @@ async function reply(chatId: string, text: string, markup?: Markup, linked?: Lin
   for (const [index, content] of chunks.entries()) {
     if (linked) {
       const current = await resolveTelegramUser(chatId);
-      if (!current || current.id !== linked.id || current.connectionId !== linked.connectionId) return;
+      if (!current || current.id !== linked.id || current.connectionId !== linked.connectionId) return false;
     }
     await sendMessage(chatId, content, index === chunks.length - 1 ? markup : undefined);
   }
+  return true;
+}
+
+async function replyWithRecords(chatId: string, text: string, linked: LinkedUser, updateId: number, kind: RecordContext["kind"], ids: string[], relatedBillId?: string) {
+  if (await reply(chatId, text, undefined, linked)) {
+    await rememberRecords(linked.id, chatId, linked.connectionId, updateId, ids.length ? { kind, ids, ...(relatedBillId ? { relatedBillId } : {}) } : null);
+  }
+}
+
+function choiceLines<T extends { id: string }>(ids: string[], rows: T[], render: (row: T) => string) {
+  return ids.map((id, index) => {
+    const row = rows.find((item) => item.id === id);
+    return `${index + 1}. ${row ? render(row) : "Rekod sudah tiada"}`;
+  }).join("\n");
+}
+
+function ledgerLine(row: { description: string; amount: string; categoryName: string; occurredOn: string }) {
+  return `${row.description} · ${formatMyr(row.amount)} · ${row.categoryName} · ${row.occurredOn}`;
 }
 
 async function presentStored(chatId: string, pending: Pending, categories: TelegramCategory[], linked: LinkedUser) {
@@ -51,18 +72,28 @@ async function presentStored(chatId: string, pending: Pending, categories: Teleg
       await reply(chatId, "Cadangan tidak tersedia. Gunakan /cancel dan hantar semula.", undefined, linked);
       return;
     }
-    const question = "operation" in payload.data
-      ? payload.data.operation === "pay_bill"
-        ? "Bil mana yang dah dibayar? Balas dengan nama dalam senarai bil. /cancel untuk batal."
-        : `${billQuestion(payload.data.bill, categories)} /cancel untuk batal.`
-      : clarificationQuestion(payload.data, categories);
+    let question: string;
+    if (!("operation" in payload.data)) question = clarificationQuestion(payload.data, categories);
+    else if (payload.data.operation === "create_bill") question = `${billQuestion(payload.data.bill, categories)} /cancel untuk batal.`;
+    else if (payload.data.operation === "choose_transaction") {
+      const ids = payload.data.choices;
+      const rows = await findLedgerRecords(linked.id, chatId, { ids });
+      question = `Transaksi mana? Balas dengan nombor dalam senarai. /cancel untuk batal.\n${choiceLines(ids, rows, ledgerLine)}`;
+    } else {
+      const ids = payload.data.choices;
+      const bills = ids ? await getTelegramBills(linked.id, chatId, { ids }) : [];
+      question = "Bil mana yang dah dibayar? Balas dengan nama atau nombor dalam senarai bil. /cancel untuk batal.";
+      if (ids) question += `\n${choiceLines(ids, bills, (bill) => `${bill.name} · ${formatMyr(bill.amount)} · ${bill.nextDueOn}`)}`;
+    }
     await reply(chatId, question, undefined, linked);
     return;
   }
   const payload = pendingProposalSchema.safeParse(pending.payload);
   if (!payload.success) { await reply(chatId, "Cadangan tidak tersedia. Gunakan /cancel dan hantar semula."); return; }
   const byId = new Map(categories.map((category) => [category.id, category.name]));
-  const details = "operation" in payload.data ? describeBillProposal(payload.data, categories) : payload.data.transactions.map((item, index) =>
+  const details = "operation" in payload.data
+    ? payload.data.operation === "create_bill" || payload.data.operation === "pay_bill" ? describeBillProposal(payload.data, categories) : describeFinanceMutation(payload.data)
+    : payload.data.transactions.map((item, index) =>
     `${index + 1}. ${item.description}\n${item.type === "INCOME" ? "Pendapatan" : "Belanja"}: ${formatMyr(item.amount)} · ${byId.get(item.categoryId) ?? "kategori tidak tersedia"} · ${item.occurredOn}`).join("\n");
   await reply(chatId, `Semak cadangan ini sebelum simpan:\n${details}\nBelum disimpan. Luput selepas 10 minit. Untuk ubah, batal dan hantar semula.`, { inline_keyboard: [[{ text: "Sahkan", callback_data: `a:${pending.id}` }, { text: "Batal", callback_data: `c:${pending.id}` }]] }, linked);
 }
@@ -78,15 +109,26 @@ async function present(user: LinkedUser, chatId: string, result: Proposed, categ
 
 function billList(bills: Awaited<ReturnType<typeof getTelegramBills>>, today: string) {
   if (!bills.length) return "Tiada bil tertunggak atau perlu dibayar dalam 30 hari akan datang.";
-  return `Bil tertunggak dan bil dalam 30 hari akan datang:\n${bills.slice(0, 10).map((bill) =>
-    `• ${bill.name} · ${formatMyr(bill.amount)} · ${bill.nextDueOn}${bill.nextDueOn < today ? " (tertunggak)" : ""}`).join("\n")}${bills.length > 10 ? "\nBuka DuitFlow untuk semua bil." : ""}`;
+  return `Bil tertunggak dan bil dalam 30 hari akan datang:\n${bills.slice(0, 10).map((bill, index) =>
+    `${index + 1}. ${bill.name} · ${formatMyr(bill.amount)} · ${bill.nextDueOn}${bill.nextDueOn < today ? " (tertunggak)" : ""}${bill.progress ? ` · ${bill.progress}` : ""}`).join("\n")}${bills.length > 10 ? "\nBuka DuitFlow untuk semua bil." : ""}`;
 }
 
 function describeBillLookup(bills: Awaited<ReturnType<typeof getTelegramBills>>) {
   if (!bills.length) return "Saya tak jumpa bil aktif dengan nama itu. Taip /bills untuk semak senarai atau ‘catat bil’ untuk tambah.";
-  if (bills.length > 1) return "Ada beberapa bil aktif dengan nama itu. Buka DuitFlow untuk pilih bil yang betul.";
+  if (bills.length > 1) return `Ada beberapa padanan. Balas dengan nombor bil.\n${choiceLines(bills.slice(0, 10).map((bill) => bill.id), bills,
+    (bill) => `${bill.name} · ${formatMyr(bill.amount)} · ${bill.nextDueOn}${bill.completed ? " (selesai)" : ""}`)}`;
   const [bill] = bills;
-  return `Bil ${bill.name} perlu dibayar ${formatMyr(bill.amount)} pada ${bill.nextDueOn}. Jika sudah bayar, beritahu saya ‘dah bayar bil ${bill.name}’.`;
+  if (bill.completed) return `Bil ${bill.name} sudah selesai. Tarikh bil terakhir ${bill.nextDueOn}.${bill.progress ? ` ${bill.progress}.` : ""}`;
+  return `Bil ${bill.name} perlu dibayar ${formatMyr(bill.amount)} pada ${bill.nextDueOn}.${bill.progress ? ` ${bill.progress}.` : ""} Jika sudah bayar, beritahu saya ‘dah bayar bil ${bill.name}’.`;
+}
+
+function referenceIds(context: RecordContext | null, kind: RecordContext["kind"]) {
+  if (context?.kind === kind) return context.ids;
+  return kind === "bill" && context?.relatedBillId ? [context.relatedBillId] : [];
+}
+
+function chosenId(ids: string[], reference: NonNullable<ReturnType<typeof recordReference>>) {
+  return reference.index === null ? ids.length === 1 ? ids[0] : undefined : ids[reference.index];
 }
 
 async function processCallback(update: TelegramUpdate) {
@@ -112,20 +154,47 @@ async function processCallback(update: TelegramUpdate) {
     const saved = await approvePendingAction(user.id, telegramUserId, data[2]);
     if (!saved) return;
     if (!Array.isArray(saved)) {
-      if (saved.kind === "BILL_CHANGED") {
-        notification = "Butiran bil sudah berubah.";
-        await reply(chatId, "Butiran bil sudah berubah. Semak bil dan hantar permintaan semula.", undefined, user);
-      } else {
-        notification = saved.kind === "BILL_CREATED" ? "Bil disimpan." : "Bayaran direkod.";
-        const content = saved.kind === "BILL_CREATED"
-          ? `Bil ${saved.name} disimpan. Perlu dibayar ${formatMyr(saved.amount)} pada ${saved.nextDueOn}.`
-          : `Bayaran ${formatMyr(saved.payment.amount)} untuk ${saved.payment.description} direkod pada ${saved.payment.occurredOn}.${saved.nextDueOn ? ` Bil seterusnya pada ${saved.nextDueOn}.` : " Jadual bil sudah tamat."}`;
-        await reply(chatId, content, undefined, user);
+      switch (saved.kind) {
+        case "BILL_CHANGED":
+          notification = "Butiran bil sudah berubah.";
+          await reply(chatId, "Butiran bil sudah berubah. Semak bil dan hantar permintaan semula.", undefined, user);
+          break;
+        case "RECORD_CHANGED":
+          notification = "Butiran sudah berubah.";
+          await reply(chatId, "Butiran sudah berubah sejak cadangan ditunjukkan. Semak rekod dan hantar permintaan semula.", undefined, user);
+          break;
+        case "BILL_CREATED":
+          notification = "Bil disimpan.";
+          await replyWithRecords(chatId, `Bil ${saved.name} disimpan. Perlu dibayar ${formatMyr(saved.amount)} pada ${saved.nextDueOn}.`, user, update.update_id, "bill", [saved.id]);
+          break;
+        case "BILL_PAID":
+          notification = "Bayaran direkod.";
+          await replyWithRecords(chatId, `Bayaran ${formatMyr(saved.payment.amount)} untuk ${saved.payment.description} direkod pada ${saved.payment.occurredOn}.${saved.nextDueOn ? ` Bil seterusnya pada ${saved.nextDueOn}.` : " Jadual bil sudah tamat."}`,
+            user, update.update_id, "transaction", [saved.payment.id], saved.billId);
+          break;
+        case "TRANSACTION_EDITED":
+          notification = "Transaksi dikemas kini.";
+          await replyWithRecords(chatId, `Amaun ${saved.description} dikemas kini kepada ${formatMyr(saved.amount)}.`, user, update.update_id, "transaction", [saved.id]);
+          break;
+        case "TRANSACTION_UNDONE":
+          notification = "Transaksi dipadam.";
+          await replyWithRecords(chatId, `Transaksi ${saved.description} dipadam.${saved.restore ? ` Bil ${saved.restore.name} dibuka semula untuk ${saved.restore.dueOn}.` : ""}`,
+            user, update.update_id, "transaction", []);
+          break;
+        case "BUDGET_SAVED":
+          notification = "Bajet disimpan.";
+          await reply(chatId, `Bajet ${saved.label} untuk ${saved.period} disimpan dengan had ${formatMyr(saved.amount)}.`, undefined, user);
+          break;
+        case "NOTIFICATIONS_SAVED":
+          notification = "Tetapan disimpan.";
+          await reply(chatId, `Tetapan disimpan.\n${describeNotifications(saved.settings)}`, undefined, user);
+          break;
       }
       return;
     }
     notification = "Transaksi disimpan.";
-    await reply(chatId, `Disimpan:\n${saved.map((item) => `${item.description}: ${formatMyr(item.amount)} · ${item.categoryName} · ${item.occurredOn}`).join("\n")}`, undefined, user);
+    await replyWithRecords(chatId, `Disimpan:\n${saved.map((item, index) => `${index + 1}. ${item.description}: ${formatMyr(item.amount)} · ${item.categoryName} · ${item.occurredOn}`).join("\n")}`,
+      user, update.update_id, "transaction", saved.map((item) => item.id));
   } catch (error) {
     processingFailed = true;
     throw error;
@@ -158,15 +227,31 @@ async function processMessage(update: TelegramUpdate) {
   if (!user) { await reply(chatId, `Akaun Telegram belum disambungkan. ${linkInstructions}`); return; }
   if (command) {
     const operation = command[1].toLowerCase();
+    if (operation === "peringatan" || operation === "mingguan") {
+      const previous = await getActionForUpdate(user.id, telegramUserId, update.update_id);
+      if (previous) { await presentStored(chatId, previous, [], user); return; }
+      const setting = await getNotificationSettings(user.id, telegramUserId);
+      const change = notificationChange(operation, command[2] ?? "");
+      if (!change) { await reply(chatId, `${describeNotifications(setting.settings)}\n\n${notificationHelp}`, undefined, user); return; }
+      const next = { ...setting.settings, ...change };
+      if (Object.entries(next).every(([key, value]) => setting.settings[key as keyof typeof next] === value)) {
+        await reply(chatId, `Tetapan semasa\n${describeNotifications(next)}`, undefined, user);
+        return;
+      }
+      await present(user, chatId, { kind: "PROPOSAL", payload: { operation: "set_notifications", version: setting.version, previous: setting.settings, next } }, [], update.update_id);
+      return;
+    }
     const pending = await getPendingAction(user.id, telegramUserId);
     if (pending?.kind === "CLARIFICATION" || operation === "cancel") await cancelPendingAction(user.id, telegramUserId);
     if (operation === "cancel") {
       await setTelegramFinanceTopic(user.id, telegramUserId, user.connectionId, update.update_id, null);
+      await rememberRecords(user.id, telegramUserId, user.connectionId, update.update_id, null);
       await reply(chatId, "Cadangan atau soalan dibatalkan.");
       return;
     }
     if (operation === "bills") {
-      await reply(chatId, billList(await getTelegramBills(user.id, telegramUserId), todayInMalaysia()), undefined, user);
+      const bills = await getTelegramBills(user.id, telegramUserId);
+      await replyWithRecords(chatId, billList(bills, todayInMalaysia()), user, update.update_id, "bill", bills.slice(0, 10).map((bill) => bill.id));
       return;
     }
     if (!["balance", "budget", "report"].includes(operation)) { await reply(chatId, help); return; }
@@ -175,10 +260,12 @@ async function processMessage(update: TelegramUpdate) {
     const period = periodResult.data;
     if (operation === "budget") {
       const budgets = await getTelegramBudgets(user.id, telegramUserId, period);
-      await reply(chatId, budgets.length ? `Bajet ${period}:\n${budgets.map((row) => `${row.categoryName}: belanja ${formatMyr(row.spent)} / ${formatMyr(row.limitAmount)}; baki ${formatMyr(row.remaining)}`).join("\n")}` : `Tiada bajet untuk ${period}. Tetapkan bajet di web.`, undefined, user);
+      await reply(chatId, budgets.length ? `Bajet ${period}:\n${budgets.map((row) => `${row.categoryName}: belanja ${formatMyr(row.spent)} / ${formatMyr(row.limitAmount)}; baki ${formatMyr(row.remaining)}`).join("\n")}` : `Tiada bajet untuk ${period}. Cuba ‘Bajet makan ${period} RM400’.`, undefined, user);
     } else {
       const report = await getTelegramReport(user.id, telegramUserId, period);
-      await reply(chatId, renderMonthlyReport(report, period, operation === "balance" ? "BALANCE" : "FULL"), undefined, user);
+      const content = renderMonthlyReport(report, period, operation === "balance" ? "BALANCE" : "FULL");
+      if (operation === "report") await replyWithRecords(chatId, content, user, update.update_id, "transaction", report.recent.map((row) => row.id));
+      else await reply(chatId, content, undefined, user);
     }
     return;
   }
@@ -210,6 +297,60 @@ async function processMessage(update: TelegramUpdate) {
     else await reply(chatId, response);
     return;
   }
+  const updateId = update.update_id;
+  const contextForChat = () => readRecordContext(user.id, telegramUserId, user.connectionId, updateId, now);
+  const showBills = (bills: Awaited<ReturnType<typeof getTelegramBills>>, content = describeBillLookup(bills)) =>
+    replyWithRecords(chatId, content, user, updateId, "bill", bills.slice(0, 10).map((bill) => bill.id));
+  const ledgerSelection = transactionSelectionSchema.safeParse(clarification?.payload);
+  const payState = billPaymentClarificationSchema.safeParse(clarification?.payload);
+  const reference = recordReference(chatText);
+  const budget = parseBudgetChange(chatText, categories, now);
+  if (budget) {
+    if ("error" in budget) await reply(chatId, budget.error!, undefined, user);
+    else await present(user, chatId, { kind: "PROPOSAL", payload: await proposeBudget(user.id, telegramUserId, budget.category.id, budget.month, budget.amount) }, categories, updateId);
+    return;
+  }
+  const ledgerChange = parseLedgerChange(chatText);
+  const proposeTransaction = async (id: string, change: Extract<FinanceMutation, { operation: "change_transaction" }>["change"], clarificationId?: string) => {
+    const proposal = await proposeLedgerChange(user.id, telegramUserId, id, change);
+    if ("error" in proposal) await reply(chatId, proposal.error!, undefined, user);
+    else await present(user, chatId, { kind: "PROPOSAL", payload: proposal }, categories, updateId, clarificationId);
+  };
+  if (ledgerChange) {
+    if ("error" in ledgerChange) { await reply(chatId, ledgerChange.error!, undefined, user); return; }
+    const target = ledgerChange.reference;
+    const contextIds = target && target.kind !== "bill" ? referenceIds(await contextForChat(), "transaction") : [];
+    const matches = target
+      ? await findLedgerRecords(user.id, telegramUserId, { ids: contextIds })
+      : await findLedgerRecords(user.id, telegramUserId, ledgerChange.last ? { last: true }
+        : { name: ledgerChange.name, occurredOn: ledgerChange.today ? todayInMalaysia(now) : undefined });
+    const ids = matches.map((row) => row.id);
+    if (target && target.index !== null) {
+      // Resolve against the original numbered list, even if a row disappeared.
+      const chosen = chosenId(contextIds, target);
+      if (chosen && ids.includes(chosen)) await proposeTransaction(chosen, ledgerChange.change);
+      else await reply(chatId, "Nombor transaksi itu tidak tersedia. Gunakan /report atau sebut nama transaksi.", undefined, user);
+    } else if (matches.length === 1 && (!target || contextIds.length === 1)) {
+      await proposeTransaction(matches[0].id, ledgerChange.change);
+    } else if (matches.length) {
+      await present(user, chatId, { kind: "CLARIFICATION", payload: { operation: "choose_transaction", change: ledgerChange.change, choices: ids.slice(0, 10) } }, categories, updateId);
+    } else {
+      await reply(chatId, "Saya tak jumpa transaksi anda yang sepadan. Gunakan /report untuk pilih rekod atau sebut nama transaksi.", undefined, user);
+    }
+    return;
+  }
+  if (ledgerSelection.success && reference && reference.kind !== "bill") {
+    const id = chosenId(ledgerSelection.data.choices, reference);
+    if (id) await proposeTransaction(id, ledgerSelection.data.change, clarification?.id);
+    else await presentStored(chatId, clarification!, categories, user);
+    return;
+  }
+  if (asksWhySpendingChanged(chatText)) {
+    if (clarification) await cancelPendingAction(user.id, telegramUserId, clarification.id);
+    const answer = await explainSpendingChange(user.id, telegramUserId, now);
+    await replyWithRecords(chatId, answer.text, user, updateId, "transaction", answer.ids);
+    return;
+  }
   const directQuestion = parseFinanceQuestion(chatText, categories);
   const followup = directQuestion ? null : parseFinanceFollowup(chatText);
   if (directQuestion || followup) {
@@ -227,7 +368,11 @@ async function processMessage(update: TelegramUpdate) {
         : { ...question, period: answer.month });
       if (remembered.success) await setTelegramFinanceTopic(user.id, telegramUserId, user.connectionId, update.update_id, remembered.data, now);
     }
-    await reply(chatId, renderFinanceAnswer(answer), undefined, user);
+    const content = renderFinanceAnswer(answer);
+    if (answer.kind === "RECENT" || (answer.kind === "REPORT" && answer.view === "FULL")) {
+      const records = answer.kind === "RECENT" ? answer.rows : answer.report.recent;
+      await replyWithRecords(chatId, content, user, updateId, "transaction", records.map((row) => row.id));
+    } else await reply(chatId, content, undefined, user);
     return;
   }
   const transactionFollowup = clarification ? continueClarification(clarification.payload, chatText, categories) : null;
@@ -243,47 +388,86 @@ async function processMessage(update: TelegramUpdate) {
       const matches = await getTelegramBills(user.id, telegramUserId, { name: billFollowup.name }, now);
       if (matches.length) {
         if (clarification) await cancelPendingAction(user.id, telegramUserId, clarification.id);
-        await reply(chatId, describeBillLookup(matches), undefined, user);
+        await showBills(matches);
         return;
       }
     }
     await present(user, chatId, prepareBillDraft(billFollowup, categories), categories, update.update_id, clarification?.id);
     return;
   }
-  if (billState.success && /^(?:sekali(?: sahaja| saja| je)?|one[- ]off)[.!]*$/i.test(chatText)) {
-    if (clarification) await cancelPendingAction(user.id, telegramUserId, clarification.id);
-    await reply(chatId, "Jadual DuitFlow menyokong bil bulanan dan tahunan. Untuk bil sekali sahaja, boleh catat belanja selepas dibayar.");
+  const paymentName = payState.success ? readBillNameReply(chatText) : undefined;
+  const paymentFollowup = payState.success && (paymentName || (reference && reference.kind !== "transaction"))
+    ? { kind: "PAY" as const, name: paymentName ?? chatText, payment: payState.data.payment } : undefined;
+  if (reference && !paymentFollowup) {
+    const context = await contextForChat();
+    const kind = reference.kind ?? context?.kind;
+    const ids = kind ? referenceIds(context, kind) : [];
+    const id = chosenId(ids, reference);
+    if (kind === "bill" && ids.length) {
+      if (reference.index !== null && !id) { await reply(chatId, "Pilih nombor bil dalam senarai.", undefined, user); return; }
+      const bills = await getTelegramBills(user.id, telegramUserId, { ids: id ? [id] : ids }, now);
+      if (id) await showBills(bills);
+      else await reply(chatId, `Bil mana? Balas dengan nombor.\n${choiceLines(ids, bills, (row) => `${row.name} · ${formatMyr(row.amount)} · ${row.nextDueOn}`)}`, undefined, user);
+    } else if (kind === "transaction" && ids.length) {
+      const rows = await findLedgerRecords(user.id, telegramUserId, { ids: id ? [id] : ids });
+      if (id && rows.length) await replyWithRecords(chatId, ledgerLine(rows[0]), user, updateId, kind, [id]);
+      else await reply(chatId, `Pilih nombor transaksi yang masih tersedia.\n${choiceLines(ids, rows, ledgerLine)}`, undefined, user);
+    } else await reply(chatId, "Saya perlukan rekod yang dimaksudkan. Gunakan /bills atau /report dan pilih nombor daripada senarai.", undefined, user);
     return;
   }
-
-  const payState = billPaymentClarificationSchema.safeParse(clarification?.payload);
-  const paymentName = payState.success ? readBillNameReply(chatText) : undefined;
-  const paymentFollowup = paymentName && payState.success ? { kind: "PAY" as const, name: paymentName, payment: payState.data.payment } : undefined;
   const bill = paymentFollowup ?? parseBillIntent(chatText, now);
   if (bill) {
     if (bill.kind === "MESSAGE") { await reply(chatId, bill.message); return; }
-    if (bill.kind === "PAY" && !bill.name) {
-      await present(user, chatId, { kind: "CLARIFICATION", payload: { operation: "pay_bill", payment: bill.payment } }, categories, update.update_id);
+    if (bill.kind === "PAY") {
+      const target = bill.name ? recordReference(bill.name) : null;
+      const ids = target && target.kind !== "transaction"
+        ? (paymentFollowup && payState.success ? payState.data.choices : undefined) ?? referenceIds(await contextForChat(), "bill")
+        : [];
+      const chosen = target ? chosenId(ids, target) : undefined;
+      if (target?.index != null && !chosen && paymentFollowup) {
+        await presentStored(chatId, clarification!, categories, user);
+        return;
+      }
+      const filter = target ? { ids: chosen ? [chosen] : ids }
+        : bill.name ? { name: bill.name } : { all: true as const };
+      const matches = (await getTelegramBills(user.id, telegramUserId, filter, now)).filter((match) => match.active);
+      if (matches.length === 1 && (chosen || (!target && bill.name))) {
+        const [match] = matches;
+        const payload: BillProposal = {
+          operation: "pay_bill", billId: match.id, version: match.version, name: match.name, nextDueOn: match.nextDueOn,
+          scheduleAfter: match.scheduleAfter,
+          payment: { amount: bill.payment.amount ?? match.amount, occurredOn: bill.payment.occurredOn, description: match.name },
+        };
+        await present(user, chatId, { kind: "PROPOSAL", payload }, categories, updateId, paymentFollowup ? clarification?.id : undefined);
+      } else if ((!target && bill.name) || chosen) {
+        if (matches.length > 1) {
+          await present(user, chatId, { kind: "CLARIFICATION", payload: { operation: "pay_bill", payment: bill.payment, choices: matches.slice(0, 10).map((item) => item.id) } }, categories, updateId, paymentFollowup ? clarification?.id : undefined);
+        } else await reply(chatId, describeBillLookup([]), undefined, user);
+      } else {
+        const choices = matches.length ? matches : await getTelegramBills(user.id, telegramUserId, { all: true }, now);
+        await present(user, chatId, { kind: "CLARIFICATION", payload: { operation: "pay_bill", payment: bill.payment, ...(choices.length ? { choices: choices.slice(0, 10).map((item) => item.id) } : {}) } }, categories, updateId, paymentFollowup ? clarification?.id : undefined);
+      }
       return;
     }
-    const name = bill.kind === "DRAFT" ? bill.bill.name : "name" in bill ? bill.name : undefined;
-    const filter = bill.kind === "NEXT" ? { next: true as const } : name ? { name } : undefined;
+    const name = bill.kind === "DRAFT" ? bill.bill.name : bill.kind === "LOOKUP" ? bill.name : undefined;
+    const target = name ? recordReference(name) : null;
+    if (target) {
+      const ids = target.kind === "transaction" ? [] : referenceIds(await contextForChat(), "bill");
+      const id = chosenId(ids, target);
+      if (target.index !== null && !id) { await reply(chatId, "Pilih nombor daripada senarai /bills.", undefined, user); return; }
+      await showBills(await getTelegramBills(user.id, telegramUserId, { ids: id ? [id] : ids }, now));
+      return;
+    }
+    const filter = bill.kind === "NEXT" ? { next: true as const, installmentsOnly: bill.installmentsOnly } : name ? { name, includeCompleted: bill.kind === "LOOKUP" } : undefined;
     const matches = filter || bill.kind === "LIST" ? await getTelegramBills(user.id, telegramUserId, filter, now) : [];
     if (bill.kind === "DRAFT" && !matches.length) {
       await present(user, chatId, prepareBillDraft(bill.bill, categories), categories, update.update_id);
-    } else if (bill.kind === "PAY" && matches.length === 1) {
-      const [match] = matches;
-      const payload: BillProposal = {
-        operation: "pay_bill", billId: match.id, version: match.version, name: match.name, nextDueOn: match.nextDueOn,
-        payment: { amount: bill.payment.amount ?? match.amount, occurredOn: bill.payment.occurredOn, description: match.name },
-      };
-      await present(user, chatId, { kind: "PROPOSAL", payload }, categories, update.update_id, paymentFollowup ? clarification?.id : undefined);
     } else {
-      if (clarification && !paymentFollowup) await cancelPendingAction(user.id, telegramUserId, clarification.id);
+      if (clarification) await cancelPendingAction(user.id, telegramUserId, clarification.id);
       const response = bill.kind === "LIST" ? billList(matches, todayInMalaysia(now))
-        : bill.kind === "NEXT" ? (matches.length ? `Bil terdekat\n${describeBillLookup(matches)}` : "Tiada bil berjadual mulai hari ini. Taip /bills untuk semak bil tertunggak.")
+        : bill.kind === "NEXT" ? (matches.length ? `${bill.installmentsOnly ? "Ansuran seterusnya" : "Bil terdekat"}\n${describeBillLookup(matches)}` : "Tiada jadual sepadan mulai hari ini. Taip /bills untuk semak bil tertunggak.")
         : describeBillLookup(matches);
-      await reply(chatId, response, undefined, user);
+      await showBills(matches, response);
     }
     return;
   }

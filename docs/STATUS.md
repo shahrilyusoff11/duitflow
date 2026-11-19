@@ -8,6 +8,67 @@ smoke checks. Approved real auth and synthetic finance/bot writes occurred;
 no schema migration, new application dependency or paid service was introduced in Phase 5.
 The hosted release offers DeepSeek Flash with per-user opt-in.
 
+## Telegram finance tools and notifications — 19 November 2026
+
+- [x] Transaction amount edits and undo use the existing Sahkan/Batal
+  approval. Ambiguous searches show numbered results. Undo of the latest
+  tracked bill payment removes its expense and reopens the due date atomically
+  if the bill is still at the payment's version.
+- [x] Telegram creates and changes expense-category budget limits by Malaysian
+  month. Proposals show the previous and new limit and preserve the current
+  budget warning setting.
+- [x] Recent results support references such as `bil yang tadi`, `yang kedua`
+  and `transaksi tu`. The 10-minute context is scoped to the linked private
+  chat, uses record IDs, and clears on cancellation or unlink.
+- [x] One-off bills and counted or date-bounded installment plans share one
+  schedule across web and Telegram. Both payment paths use the same database
+  transaction and expose due dates, progress and completion.
+- [x] Spending explanations compare equivalent Malaysian calendar days and
+  rank contributing categories by recorded change. They show actual
+  transactions and label the spending review suggestion separately.
+- [x] Opt-in bill lead times, budget threshold reminders and weekday selection
+  for weekly summaries are editable from Telegram with confirmation. Weekly
+  summaries show the prior complete week's expenses and leading category,
+  current budget balances and upcoming bills.
+- [x] The local scheduler uses one Vercel Hobby cron at `0 1 * * *`, in the
+  9:00–9:59 a.m. Malaysia window. Database delivery receipts deduplicate
+  concurrent runs and replays. A Telegram 429 can retry while the event is
+  still eligible. An ambiguous failure can leave a message undelivered because
+  resending could duplicate it. [Vercel Cron plan limits](https://vercel.com/docs/schedules/cron-jobs/usage-and-pricing) · [Vercel retry behavior](https://vercel.com/docs/schedules/cron-jobs/manage-cron-jobs#error-handling)
+- [x] Disposable PostgreSQL upgrade coverage verifies that
+  `20261119000001_telegram_finance_tools` keeps existing connections, bills and
+  expenses, and defaults notifications off. Telegram declines legacy undo
+  where historical bill associations cannot be established.
+- [ ] Before live use, obtain separate release approval, apply the pending
+  reviewed migrations including `20261119000001_telegram_finance_tools`,
+  configure a Production-only `CRON_SECRET`, deploy, and verify a synthetic
+  chat payment/undo, replay and scheduled delivery on the approved release.
+
+The webhook tests use synthetic records, disposable PostgreSQL and mocked
+Telegram transport. They cover the example phrases, wrong or ambiguous matches,
+cross-account access, expired references and approvals, web changes after a
+proposal, double taps and redelivery. Scheduler tests cover opt-in, Malaysian
+week boundaries, overlapping invocations, explicit rate limits and uncertain
+delivery. This work was local and made no production migration, deployment,
+live Telegram/DeepSeek request or billing change.
+
+| Local check on Windows and Node 26.11.1 | Result |
+| --- | --- |
+| `npm run db:validate` | Passed |
+| `npm run lint` | Passed |
+| `npm run typecheck` | Passed |
+| `npm test` | 364 passed across 16 files |
+| `npm run build` | Passed with the notification and webhook routes dynamic |
+| `npm run test:e2e` | 36 passed on desktop and mobile Chromium |
+| `git diff --check` | Passed |
+
+Playwright applied the migrations with `prisma migrate deploy` against its
+disposable PostgreSQL fixture. The new browser flow confirms a final installment,
+shows the completed bill, and reopens it when deleting the linked expense. The
+first run found a not-found page for the fixture bill ID containing a colon.
+The route-compatible fixture and explicit wait for the payment page passed on
+both browser projects and in the full rerun.
+
 ## Telegram financial discussion — 19 November 2026
 
 - [x] Natural-language analysis summarizes recorded income, expenses and

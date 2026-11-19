@@ -14,7 +14,7 @@ export type TelegramKeyboard = z.infer<typeof keyboardSchema>;
 
 // No raw transport errors escape: they may contain the token-bearing path.
 export class TelegramTransportError extends Error {
-  constructor(public readonly retryable: boolean) { super("TELEGRAM_DELIVERY_FAILED"); }
+  constructor(public readonly retryable: boolean, public readonly retryAfterSeconds?: number) { super("TELEGRAM_DELIVERY_FAILED"); }
 }
 
 async function callTelegram(method: "sendMessage" | "answerCallbackQuery", payload: unknown): Promise<void> {
@@ -46,14 +46,18 @@ async function callTelegram(method: "sendMessage" | "answerCallbackQuery", paylo
       if (bytes > MAX_TELEGRAM_RESPONSE_BYTES) throw new TelegramTransportError(true);
       chunks.push(buffer);
     }
-    const result = z.object({ ok: z.boolean(), error_code: z.number().int().optional() }).safeParse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+    const result = z.object({
+      ok: z.boolean(), error_code: z.number().int().optional(),
+      parameters: z.object({ retry_after: z.number().int().positive().max(86_400_000).optional() }).optional(),
+    }).safeParse(JSON.parse(Buffer.concat(chunks).toString("utf8")));
     if (!result.success) throw new TelegramTransportError(true);
     if (status !== 200 || !result.data.ok) {
       const code = result.data.error_code ?? status;
       // Only explicit permanent request/chat rejections stop delivery retries.
       // An invalid token/configuration or unexpected upstream response can be
       // repaired; acknowledging it as DONE would silently lose the update.
-      throw new TelegramTransportError(code !== 400 && code !== 403);
+      const retryAfter = status === 429 && !result.data.ok && code === 429 ? result.data.parameters?.retry_after ?? 60 : undefined;
+      throw new TelegramTransportError(code !== 400 && code !== 403, retryAfter);
     }
   } catch (error) {
     if (error instanceof TelegramTransportError) throw error;

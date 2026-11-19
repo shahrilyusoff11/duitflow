@@ -65,6 +65,12 @@ describe("Telegram transport", () => {
     upstream({ ok: false }, 403);
     await expect(sendMessage("12345", "Synthetic text")).rejects.toEqual(new TelegramTransportError(false));
   });
+  it("exposes a safe retry delay only for an explicit rate-limit rejection", async () => {
+    upstream({ ok: false, error_code: 429, parameters: { retry_after: 32 } }, 429);
+    await expect(sendMessage("12345", "Synthetic text")).rejects.toMatchObject({ retryAfterSeconds: 32 });
+    upstream({ ok: false, error_code: 429, parameters: { retry_after: 32 } }, 503);
+    await expect(sendMessage("12345", "Synthetic text")).rejects.toMatchObject({ retryAfterSeconds: undefined });
+  });
   it.each([{ status: 200, body: {} }, { status: 200, body: { ok: false, error_code: 429 } }, { status: 401, body: { ok: false } }])("keeps uncertain upstream/configuration failures retryable (%j)", async ({ status, body }) => {
     upstream(body, status);
     await expect(sendMessage("12345", "Synthetic text")).rejects.toMatchObject({ message: "TELEGRAM_DELIVERY_FAILED", retryable: true });

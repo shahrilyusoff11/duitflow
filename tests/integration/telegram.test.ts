@@ -12,14 +12,20 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/server", () => ({ after: vi.fn() }));
 vi.mock("@/lib/auth", () => ({ getAuth: () => context.auth }));
 vi.mock("@/lib/db", () => ({ getDatabase: () => context.database }));
-vi.mock("@/lib/telegram/transport", () => ({ sendMessage: vi.fn(async () => undefined), answerCallbackQuery: vi.fn(async () => undefined), TelegramTransportError: class extends Error { constructor(public retryable: boolean) { super("TELEGRAM_DELIVERY_FAILED"); } } }));
+vi.mock("@/lib/telegram/transport", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../src/lib/telegram/transport")>(),
+  sendMessage: vi.fn(async () => undefined), answerCallbackQuery: vi.fn(async () => undefined),
+}));
 
 import * as telegram from "../../src/lib/telegram/dal";
 import { sendMessage, answerCallbackQuery, TelegramTransportError } from "../../src/lib/telegram/transport";
 import { POST } from "../../src/app/api/telegram/webhook/route";
+import { GET as runCron } from "../../src/app/api/telegram/notifications/route";
 import { mutateTelegram } from "../../src/app/(protected)/settings/actions";
 import * as updateState from "../../src/lib/telegram/state";
-import { parseDate, todayInMalaysia } from "../../src/lib/finance/dates";
+import { parseDate, shiftMonth, todayInMalaysia } from "../../src/lib/finance/dates";
+import { listBills, recordBillPayment } from "../../src/lib/finance/dal";
+import { runTelegramNotifications } from "../../src/lib/telegram/notifications";
 
 const environment = {
   BETTER_AUTH_URL: "http://localhost:3000", BETTER_AUTH_SECRET: "synthetic-telegram-secret-at-least-32-characters",
@@ -304,21 +310,297 @@ describe("complete secret-authenticated webhook to Prisma flow", () => {
     expect(await telegram.getPendingAction(alice, sender)).toMatchObject({
       kind: "PROPOSAL", payload: { operation: "pay_bill", name: "ShopeePay", payment: { amount: "24.00", occurredOn: daysFromToday(-1).toISOString().slice(0, 10) } },
     });
-    await deliver(messageUpdate(752, "update bil tu dah dibayar"));
+    await deliver(messageUpdate(757, "Dah bayar bil"));
     expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Bil mana yang dah dibayar?"), undefined);
     const paymentQuestion = await telegram.getPendingAction(alice, sender);
     expect(paymentQuestion).toMatchObject({ kind: "CLARIFICATION", payload: { operation: "pay_bill" } });
-    await deliver(messageUpdate(753, "Synthetic foreign"));
+    await deliver(messageUpdate(758, "Synthetic foreign"));
     expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("tak jumpa bil aktif"), undefined);
     expect((await telegram.getPendingAction(alice, sender))?.id).toBe(paymentQuestion?.id);
 
-    await deliver(messageUpdate(754, "ShopeePay"));
+    await deliver(messageUpdate(759, "ShopeePay"));
     const proposal = await telegram.getPendingAction(alice, sender);
     expect(proposal).toMatchObject({ kind: "PROPOSAL", payload: { operation: "pay_bill", name: "ShopeePay", payment: { amount: "25.00" } } });
     expect(await db.prisma.transaction.count()).toBe(0);
-    await deliver(callbackUpdate(755, proposal!.id));
+    await deliver(callbackUpdate(760, proposal!.id));
     expect(await db.prisma.transaction.findFirst()).toMatchObject({ userId: alice, description: "ShopeePay", type: "EXPENSE", source: "TELEGRAM" });
     expect(await db.prisma.recurringBill.findFirst({ where: { userId: alice, name: "ShopeePay" } })).toMatchObject({ version: 1 });
+  });
+});
+
+describe("Telegram record tools through the webhook", () => {
+  async function say(id: number, text: string, identity = sender) {
+    expect((await deliver(messageUpdate(id, text, Number(identity)))).status).toBe(200);
+    return vi.mocked(sendMessage).mock.lastCall?.[1] ?? "";
+  }
+
+  async function confirm(updateId: number, pendingId: string, identity = sender) {
+    expect((await deliver(callbackUpdate(updateId, pendingId, Number(identity)))).status).toBe(200);
+  }
+
+  async function pendingId() {
+    const row = await telegram.getPendingAction(alice, sender);
+    expect(row?.kind).toBe("PROPOSAL");
+    return row!.id;
+  }
+
+  function expense(description: string, amount: string, occurredOn = todayInMalaysia(), userId = alice, categoryId = food) {
+    return db.prisma.transaction.create({ data: { userId, categoryId, type: "EXPENSE", description, amount, occurredOn: parseDate(occurredOn) } });
+  }
+
+  it("disambiguates KFC, shows before/after, rejects foreign taps and applies edit and undo once", async () => {
+    await connect();
+    await db.prisma.telegramConnection.create({ data: { userId: bob, telegramUserId: foreignSender } });
+    const foreign = await expense("KFC foreign", "999.00", todayInMalaysia(), bob, foreignCategory);
+    const first = await expense("KFC lunch", "20.00");
+    const second = await expense("KFC dinner", "17.00");
+    const choices = await say(1000, "Tukar KFC tadi kepada RM25");
+    expect(choices).toMatch(/1\. KFC dinner[\s\S]*2\. KFC lunch/);
+    expect(choices).not.toContain(foreign.description);
+    const preview = await say(1001, "yang kedua");
+    expect(preview).toContain("KFC lunch");
+    expect(preview).toContain("RM 20.00 → RM 25.00");
+    const edit = await pendingId();
+    await confirm(1002, edit, foreignSender);
+    expect((await db.prisma.transaction.findUniqueOrThrow({ where: { id: first.id } })).amount.toFixed(2)).toBe("20.00");
+    await confirm(1003, edit);
+    await confirm(1003, edit);
+    await confirm(1004, edit);
+    expect((await db.prisma.transaction.findUniqueOrThrow({ where: { id: first.id } })).amount.toFixed(2)).toBe("25.00");
+    expect(await say(1005, "Undo catatan terakhir")).toContain("KFC dinner");
+    const undo = await pendingId();
+    expect(await db.prisma.transaction.count()).toBe(3);
+    await confirm(1006, undo);
+    await confirm(1007, undo);
+    expect(await db.prisma.transaction.findUnique({ where: { id: second.id } })).toBeNull();
+    expect(await db.prisma.transaction.count()).toBe(2);
+    expect(await say(1008, "Tukar KFC foreign tadi kepada RM1")).toContain("tak jumpa transaksi");
+  });
+
+  it("ties transaction references to the latest list in the same chat and rejects expired or changed records", async () => {
+    await connect();
+    await db.prisma.telegramConnection.create({ data: { userId: bob, telegramUserId: foreignSender } });
+    const row = await expense("Synthetic KFC", "20.00");
+    await say(1100, "/report");
+    expect(await say(1101, "transaksi tu")).toContain("Synthetic KFC");
+    expect(await say(1102, "transaksi tu", foreignSender)).not.toContain("Synthetic KFC");
+    expect(await say(1103, "Tukar transaksi tu kepada RM25")).toContain("RM 20.00 → RM 25.00");
+    const stale = await pendingId();
+    await db.prisma.transaction.update({ where: { id: row.id }, data: { amount: "21.00" } });
+    await confirm(1104, stale);
+    expect(vi.mocked(sendMessage).mock.lastCall?.[1]).toContain("Butiran sudah berubah");
+    expect((await db.prisma.transaction.findUniqueOrThrow({ where: { id: row.id } })).amount.toFixed(2)).toBe("21.00");
+    await db.prisma.telegramConnection.update({ where: { userId: alice }, data: { recordContextExpiresAt: new Date(0) } });
+    expect(await say(1105, "Tukar transaksi tu kepada RM66")).toContain("tak jumpa transaksi");
+    expect(await telegram.getPendingAction(alice, sender)).toBeNull();
+    await say(1106, "Undo catatan terakhir");
+    const expired = await pendingId();
+    await db.prisma.pendingTelegramAction.update({ where: { id: expired }, data: { expiresAt: new Date(0) } });
+    await confirm(1107, expired);
+    expect(await db.prisma.transaction.count()).toBe(1);
+    await expense("Synthetic legacy payment", "14.00").then((legacy) =>
+      db.prisma.transaction.update({ where: { id: legacy.id }, data: { paymentTrackingKnown: false } }));
+    expect(await say(1108, "Undo catatan terakhir")).toContain("Rekod lama ini");
+    expect(await db.prisma.transaction.count()).toBe(2);
+  });
+
+  it("uses the Malaysian next month and preserves an existing budget warning while guarding stale approvals", async () => {
+    await connect();
+    const period = shiftMonth(todayInMalaysia().slice(0, 7), 1);
+    const [year, month] = period.split("-").map(Number);
+    const key = { userId: alice, categoryId: food, year, month };
+    const create = await say(1200, "Bajet makan bulan depan RM400");
+    expect(create).toContain(period);
+    expect(create).toContain("Had lama: belum ditetapkan");
+    expect(create).toContain("Had baharu: RM 400.00");
+    expect(await db.prisma.budget.count()).toBe(0);
+    const first = await pendingId();
+    await confirm(1201, first);
+    await confirm(1202, first);
+    const row = await db.prisma.budget.findFirstOrThrow({ where: key });
+    expect(row.limitAmount.toFixed(2)).toBe("400.00");
+    await db.prisma.budget.update({ where: { id: row.id }, data: { warningAt: 75 } });
+    const update = await say(1203, `Ubah bajet makan ${period} kepada RM450`);
+    expect(update).toContain("Had lama: RM 400.00");
+    expect(update).toContain("Had baharu: RM 450.00");
+    const second = await pendingId();
+    await db.prisma.budget.update({ where: { id: row.id }, data: { limitAmount: "410.00" } });
+    await confirm(1204, second);
+    expect(vi.mocked(sendMessage).mock.lastCall?.[1]).toContain("Butiran sudah berubah");
+    await say(1205, "Bajet makan bulan depan RM450");
+    await confirm(1206, await pendingId());
+    const updated = await db.prisma.budget.findUniqueOrThrow({ where: { id: row.id } });
+    expect(updated.limitAmount.toFixed(2)).toBe("450.00");
+    expect(updated.warningAt).toBe(75);
+    expect(await say(1207, "Bajet gaji bulan depan RM400")).toContain("Pilih nama kategori belanja");
+    expect(await db.prisma.budget.count()).toBe(1);
+  });
+
+  it("completes a one-off via the referenced bill and restores the bill and expense atomically on undo", async () => {
+    await connect();
+    const preview = await say(1300, "Bil tiket RM70 sekali bayar 2026-11-20");
+    expect(preview).toContain("Sekali bayar");
+    await confirm(1301, await pendingId());
+    expect(await say(1302, "bil yang tadi")).toContain("Bil tiket perlu dibayar");
+    expect(await say(1303, "Dah bayar bil yang tadi")).toContain("Jadual bil akan selesai");
+    const payment = await pendingId();
+    await confirm(1304, payment);
+    await confirm(1304, payment);
+    await confirm(1305, payment);
+    const [bill] = await listBills(alice);
+    expect(bill).toMatchObject({ completed: true, active: false, paymentsMade: 1, paymentLimit: 1 });
+    expect(await db.prisma.transaction.findFirst()).toMatchObject({ billId: bill.id, billPaidVersion: 1 });
+    expect(await say(1306, "Undo transaksi tu")).toContain("dibuka semula untuk tarikh 2026-11-20");
+    const undo = await pendingId();
+    await confirm(1307, undo);
+    await confirm(1308, undo);
+    expect(await db.prisma.transaction.count()).toBe(0);
+    expect((await listBills(alice))[0]).toMatchObject({ active: true, completed: false, paymentsMade: 0, nextDueOn: "2026-11-20", version: 2 });
+  });
+
+  it("shares counted and date-bounded installments with web, preserves month-end, and declines a stale bill undo", async () => {
+    await connect();
+    expect(await say(1400, "Ansuran laptop RM100 2 kali bayar pada 2027-01-31")).toContain("0/2 dibayar");
+    await confirm(1401, await pendingId());
+    expect(await say(1402, "Dah bayar bil laptop")).toContain("1/2 dibayar");
+    await confirm(1403, await pendingId());
+    const laptop = (await listBills(alice)).find((bill) => bill.name === "laptop")!;
+    expect(laptop).toMatchObject({ nextDueOn: "2027-02-28", paymentsMade: 1, paymentLimit: 2 });
+    expect(await say(1404, "Status ansuran laptop")).toContain("1/2 dibayar");
+    await say(1405, "Undo catatan terakhir");
+    const stale = await pendingId();
+    await recordBillPayment(alice, laptop.id, String(laptop.version), { amount: "100.00", occurredOn: todayInMalaysia(), description: "Laptop web" });
+    await confirm(1406, stale);
+    expect(vi.mocked(sendMessage).mock.lastCall?.[1]).toContain("Butiran sudah berubah");
+    expect(await db.prisma.transaction.count()).toBe(2);
+    expect(await say(1407, "Bila bil laptop?")).toContain("2/2 dibayar");
+    expect(await say(1408, "Ansuran kerusi RM30 sampai 2027-02-28 pada 2027-01-31")).toContain("Ansuran hingga 2027-02-28");
+    await confirm(1409, await pendingId());
+    await say(1410, "Dah bayar bil kerusi");
+    await confirm(1411, await pendingId());
+    expect(await say(1412, "Dah bayar bil kerusi")).toContain("Jadual bil akan selesai");
+    await confirm(1413, await pendingId());
+    expect((await listBills(alice)).find((bill) => bill.name === "kerusi")).toMatchObject({ completed: true, paymentsMade: 2, endsOn: "2027-02-28" });
+    expect(await say(1414, "Ansuran kamera RM30 2 kali bayar bermula 2100-12-31")).toContain("Semak nama, amaun dan tarikh");
+    expect(await telegram.getPendingAction(alice, sender)).toBeNull();
+  });
+
+  it("binds the second bill to its original position and asks for a choice when the reference is ambiguous", async () => {
+    await connect();
+    const today = parseDate(todayInMalaysia());
+    for (const name of ["Synthetic first", "Synthetic second"]) {
+      await db.prisma.recurringBill.create({ data: { userId: alice, categoryId: food, name, amount: "15", nextDueOn: today, dayOfMonth: today.getUTCDate(), cadence: "MONTHLY" } });
+    }
+    expect(await say(1500, "/bills")).toMatch(/1\. Synthetic first[\s\S]*2\. Synthetic second/);
+    expect(await say(1501, "Dah bayar bil yang tadi")).toContain("Bil mana yang dah dibayar?");
+    expect(await say(1502, "yang kedua")).toContain("Rekod bayaran bil Synthetic second");
+    await confirm(1503, await pendingId());
+    expect(await db.prisma.transaction.findFirst()).toMatchObject({ description: "Synthetic second" });
+    await say(1504, "/cancel");
+    expect(await say(1505, "bil yang tadi")).toContain("Saya perlukan rekod");
+  });
+
+  it("explains the largest change using matched calendar days, real examples and separately worded suggestions", async () => {
+    await connect();
+    const current = todayInMalaysia().slice(0, 7);
+    const previous = shiftMonth(current, -1);
+    await expense("KFC matched current", "140.10", `${current}-01`);
+    await expense("Meal matched previous", "20.05", `${previous}-01`);
+    const entertainment = await db.prisma.category.findFirstOrThrow({ where: { userId: alice, name: "Hiburan" } });
+    const transport = await db.prisma.category.findFirstOrThrow({ where: { userId: alice, name: "Pengangkutan" } });
+    await expense("Movie matched current", "20.00", `${current}-01`, alice, entertainment.id);
+    await expense("Transport current", "190.00", `${current}-01`, alice, transport.id);
+    await expense("Transport previous", "200.00", `${previous}-01`, alice, transport.id);
+    const nextMonth = shiftMonth(current, 1);
+    await expense("Outside matched dates", "800.00", `${nextMonth}-01`);
+    await expense("Other account", "999.00", `${current}-01`, bob, foreignCategory);
+    const response = await say(1600, "Kenapa belanja aku naik?");
+    expect(response).toContain("tempoh sepadan");
+    expect(response).toContain("Belanja naik RM 130.05");
+    expect(response).toContain("Makanan & Minuman: RM 20.05 → RM 140.10");
+    expect(response).toContain("KFC matched current");
+    expect(response).toMatch(/Makanan & Minuman:.*\n• Hiburan:/);
+    expect(response).toContain("Cadangan semakan");
+    expect(response).not.toMatch(/Other account|Outside matched dates|Transport current/);
+  });
+
+  it("requires confirmation to enable, change and stop alerts and the weekly digest", async () => {
+    await connect();
+    expect(await say(1700, "/peringatan bil 3")).toContain("Tetapan lama");
+    expect(await db.prisma.telegramConnection.findUnique({ where: { userId: alice } })).toMatchObject({ billReminderDays: null });
+    await confirm(1701, await pendingId());
+    expect(await say(1702, "/peringatan bil 0")).toContain("Bil: hari matang");
+    await confirm(1703, await pendingId());
+    await say(1704, "/peringatan bajet 90");
+    await confirm(1705, await pendingId());
+    await say(1706, "/mingguan Jumaat");
+    const weekly = await pendingId();
+    await confirm(1707, weekly);
+    await confirm(1708, weekly);
+    expect(await db.prisma.telegramConnection.findUnique({ where: { userId: alice } })).toMatchObject({
+      weeklyDigestDay: 5, budgetReminderPercent: 90, billReminderDays: 0, notificationVersion: 4,
+    });
+    await say(1709, "/peringatan off");
+    await confirm(1710, await pendingId());
+    await say(1711, "/mingguan off");
+    await confirm(1712, await pendingId());
+    expect(await db.prisma.telegramConnection.findUnique({ where: { userId: alice } })).toMatchObject({
+      weeklyDigestDay: null, budgetReminderPercent: null, billReminderDays: null,
+    });
+  });
+
+  it("delivers opted-in notifications once with overlapping scans and uses Malaysia week/month boundaries", async () => {
+    await connect();
+    const secret = "synthetic-cron-secret-at-least-32-characters";
+    vi.stubEnv("CRON_SECRET", secret);
+    const cronRequest = (authorization?: string) => runCron(new Request("http://localhost/api/telegram/notifications", {
+      headers: authorization ? { authorization } : {},
+    }));
+    expect((await cronRequest()).status).toBe(401);
+    expect((await cronRequest(`Bearer ${secret}`)).status).toBe(200);
+    expect(sendMessage).not.toHaveBeenCalled();
+    await db.prisma.telegramConnection.update({ where: { userId: alice }, data: { billReminderDays: 2, budgetReminderPercent: 80, weeklyDigestDay: 1 } });
+    await db.prisma.telegramConnection.create({ data: { userId: bob, telegramUserId: foreignSender } });
+    await expense("Sunday shop", "45.10", "2026-11-29");
+    await expense("Monday shop", "90.00", "2026-11-30");
+    await expense("Foreign shop", "999.00", "2026-11-29", bob, foreignCategory);
+    await db.prisma.budget.create({ data: { userId: alice, categoryId: food, year: 2026, month: 11, limitAmount: "150.00" } });
+    await db.prisma.recurringBill.create({ data: {
+      userId: alice, categoryId: food, name: "Synthetic bill due", amount: "30", cadence: "MONTHLY",
+      nextDueOn: parseDate("2026-12-02"), dayOfMonth: 2,
+    } });
+    const malaysiaMonday = new Date("2026-11-29T16:01:00Z");
+    const results = await Promise.all([runTelegramNotifications(malaysiaMonday), runTelegramNotifications(malaysiaMonday)]);
+    expect(results.reduce((sum, result) => sum + result.sent, 0)).toBe(3);
+    expect(vi.mocked(sendMessage).mock.calls).toHaveLength(3);
+    const allMessages = vi.mocked(sendMessage).mock.calls.map(([chat, body]) => {
+      expect(chat).toBe(sender);
+      return body;
+    }).join("\n");
+    expect(allMessages).toContain("Peringatan bil");
+    expect(allMessages).toContain("Peringatan bajet · 2026-11");
+    expect(allMessages).toContain("Ringkasan mingguan · 2026-11-23 hingga 2026-11-29");
+    expect(allMessages).toContain("Jumlah belanja direkod: RM 45.10");
+    expect(allMessages).toContain("Makanan & Minuman: RM 14.90");
+    expect(allMessages).not.toContain("999");
+    expect((await runTelegramNotifications(new Date("2026-11-30T03:00:00Z"))).sent).toBe(0);
+  });
+
+  it("retries explicit rate limits after the delay and never repeats delivery after an uncertain response", async () => {
+    await connect();
+    await db.prisma.telegramConnection.update({ where: { userId: alice }, data: { billReminderDays: 3, weeklyDigestDay: 1 } });
+    await db.prisma.recurringBill.create({ data: {
+      userId: alice, categoryId: food, name: "Synthetic bill", amount: "30", cadence: "MONTHLY",
+      nextDueOn: parseDate("2026-12-02"), dayOfMonth: 2,
+    } });
+    const monday = new Date("2026-11-30T01:15:00Z");
+    vi.mocked(sendMessage).mockRejectedValueOnce(new TelegramTransportError(true, 30)).mockRejectedValueOnce(new TelegramTransportError(true));
+    expect(await runTelegramNotifications(monday)).toMatchObject({ sent: 0, failed: 2 });
+    expect((await runTelegramNotifications(new Date(monday.getTime() + 10_000))).sent).toBe(0);
+    expect((await runTelegramNotifications(new Date(monday.getTime() + 60_000))).sent).toBe(1);
+    expect((await runTelegramNotifications(new Date(monday.getTime() + 120_000))).sent).toBe(0);
+    expect(vi.mocked(sendMessage).mock.calls).toHaveLength(3);
+    expect(vi.mocked(sendMessage).mock.lastCall?.[1]).toContain("Peringatan bil");
   });
 });
 

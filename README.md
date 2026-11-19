@@ -12,8 +12,9 @@ UI uses Bahasa Melayu, MYR and Malaysian calendar dates.
 pass. The owner confirmed real GitHub sign-in/out/re-login, synthetic web CRUD,
 Telegram linking and one confirmed bot expense with no duplicate on re-tap.
 Bot: [@duitflow00bot](https://t.me/duitflow00bot). DeepSeek Flash is available
-in Production for Telegram users who opt in from Settings. Recurring bills are
-available in this checkout and await a production release.
+in Production for Telegram users who opt in from Settings. The bill schedules
+and expanded Telegram features are available in this checkout and await a
+production release.
 
 - [Implementation evidence and acceptance status](docs/STATUS.md)
 - [Actual Vercel setup and release record](docs/VERCEL_SETUP.md)
@@ -87,16 +88,16 @@ sessions**: see [the auth decision](docs/AUTH_PROPOSAL.md) and
 | Categories | Personal defaults, atomic signup seeding, owner/type constraints and in-use deletion protection |
 | Dashboard | Server-computed monthly totals, category breakdown, recent records and six-month trend |
 | Budgets | Monthly category limits, exact spent/remaining amounts and configurable warnings |
-| Recurring bills | Monthly or yearly bills, a 30-day forecast, and prefilled expense confirmation |
-| Telegram | Single-use linking, private-chat commands, clarification, Sahkan/Batal and replay-safe writes |
+| Bills | Monthly, yearly, one-off and installment schedules, a 30-day forecast, and atomic expense recording |
+| Telegram | Private-chat linking, confirmed transaction edits and undo, budget limits, recent-record references, spending comparisons, reminders and weekly summaries |
 | Optional AI | Consent off by default; bounded extraction, fixed scoped queries, Postgres caps and deterministic fallback |
 | Public demo | Immutable synthetic snapshot isolated from real accounts and provider calls |
 
 Recorded net means income minus recorded expenses for the selected period.
-Open the **Bil** tab to see overdue, scheduled, and paused bills. The dashboard
+Open the **Bil** tab to see overdue, scheduled, paused and completed bills. The dashboard
 shows a 30-day forecast with a link to the bill list. **Rekod bayaran**
 prefills the bill's name, amount, and today's payment date. Confirming records
-the actual expense and moves the bill's next due date forward. Planned bills
+the actual expense and advances or completes the schedule. Planned bills
 stay out of spending totals until a payment is confirmed.
 
 Money accepts `RM12`, `RM1,200.50`, `12 ringgit 50 sen`, `1.2k` and `50 sen`.
@@ -156,6 +157,7 @@ public; keep keys and connection strings server-side.
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Strong secret and exact app origin |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | Approved GitHub OAuth app |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_BOT_USERNAME` | Optional bot; configure all three after approval |
+| `CRON_SECRET` | Separate server-only secret of at least 32 characters for Telegram notification checks |
 | `AI_PROVIDER` | Defaults to `deterministic`. DeepSeek settings are in [AI_SETUP.md](docs/AI_SETUP.md) |
 | `NEXT_PUBLIC_APP_URL`, `APP_TIMEZONE`, `APP_CURRENCY` | App URL, `Asia/Kuala_Lumpur`, `MYR` |
 
@@ -203,6 +205,15 @@ You can chat in casual Malay and English:
 - `Aku dapat duit poket daripada abang` asks for the missing amount.
 - `Berapa aku spend bulan ni?` reads the total from your recorded expenses.
 - `Bagi report perbelanjaan aku bulan ni` shows the total and category breakdown.
+- `Tukar KFC tadi kepada RM25` finds matching transactions dated today in
+  Malaysia and previews the old and new amounts. Reply `yang kedua` if the bot
+  lists several matches. `Undo catatan terakhir` previews removal of the most
+  recently recorded transaction across web and Telegram.
+- `Bajet makan bulan depan RM400` previews a new limit or shows the old and new
+  limits for that category and Malaysian month.
+- `Kenapa belanja aku naik?` compares the same number of elapsed calendar days
+  this month and last month. It shows contributing categories, sample ledger
+  entries, and a separate suggestion for reviewing spending.
 - `Analisis kewangan aku bulan ni` summarizes recorded income, spending,
   budget warnings and how spending changed against the same days last month.
   Follow with `Kalau bulan lepas?` or `Ada cadangan?`.
@@ -211,15 +222,47 @@ You can chat in casual Malay and English:
   `Kalau RM50 pula?` to try a different amount.
 - `Ada bil kena bayar tak?` lists overdue bills and bills due within 30 days.
 - `Bil terdekat apa?` shows the next active bill due today or later.
-- `Bil ShopeePay kena bayar` checks an existing bill or asks for the amount,
-  due date, and monthly or yearly schedule. `Dah bayar bil ShopeePay RM30`
-  proposes an expense and advances the schedule when confirmed.
-  `Update bil tu dah dibayar` asks which bill you paid and accepts the name in
-  your next message.
+- `Bil tiket RM70 sekali bayar 2026-11-20` adds a one-off schedule.
+  `Ansuran laptop RM100 6 kali bayar pada 2026-11-30` adds a counted schedule.
+  Use `hingga 2027-04-30` in place of the count to set an end date.
+  `Ansuran seterusnya` and `Status ansuran laptop` show dates and progress.
+  Web and Telegram use the same schedule. Confirming a payment records the
+  expense and advances or completes the bill in one database transaction.
+- `Dah bayar bil yang tadi` uses the bill just shown in that chat. `Transaksi tu`
+  and `yang kedua` work with recent numbered results when the reference is
+  unambiguous. The context lasts 10 minutes and `/cancel` clears it. When more
+  than one record fits, the bot asks you to choose.
 
 Only **Sahkan** saves a proposal. Commands include `/start`, `/help`, `/link`,
-`/balance`, `/budget`, `/report`, `/bills`, and `/cancel`. Add `YYYY-MM`
+`/balance`, `/budget`, `/report`, `/bills`, `/peringatan`, `/mingguan`
+and `/cancel`. Add `YYYY-MM`
 after `/balance`, `/budget`, or `/report` to choose a month.
+
+Undo of a tracked bill payment removes the expense and reopens its due date in
+the same transaction. It requires the bill version from that payment. Records
+from before the payment-tracking migration have no reliable bill association,
+so Telegram declines undo for those legacy records.
+
+### Optional Telegram notifications
+
+Preferences default off. Telegram shows the proposed change before saving it.
+
+| Command | Effect |
+| --- | --- |
+| `/peringatan bil 3` | Remind once per due date, up to 3 days ahead. Set 0–30 days |
+| `/peringatan bajet 80` | Remind once per budget per month when spending reaches 80% of the limit. Set 1–100% |
+| `/peringatan bil off`, `/peringatan bajet off`, `/peringatan off` | Stop one or both reminders |
+| `/mingguan Isnin` | Choose a Malay weekday for one summary per week |
+| `/mingguan off` | Stop weekly summaries |
+
+The summary covers the last complete Monday–Sunday week, the highest expense
+category, current monthly budget balances and bills due in the next seven days.
+Vercel Hobby runs one daily check in the 9:00–9:59 a.m. Malaysia window. A
+missed weekly run can catch up later in that same week. PostgreSQL claims each
+delivery before sending. An explicit Telegram rate-limit rejection can be
+retried on a later invocation while it is still eligible. An uncertain timeout
+or interrupted send can leave a message undelivered. Telegram's Bot API has no
+deduplication key for `sendMessage`. [Vercel Cron limits](https://vercel.com/docs/schedules/cron-jobs/usage-and-pricing) · [Telegram Bot API](https://core.telegram.org/bots/api#sendmessage)
 
 Secret checks precede parsing. DONE updates deduplicate; failed/stale leases
 retry; active leases return retryable 503 without duplicate work. Stable action
@@ -245,6 +288,7 @@ uses local handling. See the [mocked golden set](docs/AI_GOLDEN_REPORT.md).
 ## Checks and evidence
 
 ```sh
+npm run db:validate
 npm run lint
 npm run typecheck
 npm test
@@ -258,6 +302,11 @@ Prisma/pg. Browser tests run the production build with persisted signed test
 sessions and explicitly override all three DB URL aliases and AI configuration.
 Provider HTTP is mocked; CI makes no live AI calls. The app contains no test
 login endpoint or session bypass.
+
+The 19 November 2026 local Telegram update passed Prisma validation, lint,
+typecheck, **364 unit and integration tests**, the production build and
+**36 desktop and mobile Chromium tests**. Prisma applied the reviewed migrations
+to a disposable database for the browser suite. [Local test results](docs/STATUS.md#telegram-finance-tools-and-notifications--19-november-2026)
 
 [Release CI run 43702137694](https://github.com/shahrilyusoff11/duitflow/actions/runs/43702137694)
 passed on deployed source `9bd3995bc28f21530a440ea7f59d34048343598a`: install,
@@ -296,7 +345,15 @@ personal, non-commercial portfolio. Optional DeepSeek Flash inference is metered
 separately. Neon autosuspend and hosting cold starts
 can delay requests. Free capacity/history/recovery are limited; there is no
 backup automation or CSV export. Do not keep the only copy of important records
-here. Telegram cleanup is lazy and bounded; no cron, Redis or separate backend.
+here. The local notification implementation uses Vercel Cron and the existing
+PostgreSQL database.
+
+The Telegram finance tools and notifications are awaiting a separate production
+release approval. Before going live, apply the pending reviewed migrations,
+including `20261119000001_telegram_finance_tools`, configure a server-only
+`CRON_SECRET` in Vercel Production, deploy, and verify the synthetic chat and
+scheduled delivery flows. Vercel does not automatically retry failed cron runs.
+[Implementation status](docs/STATUS.md) · [Vercel cron management](https://vercel.com/docs/schedules/cron-jobs/manage-cron-jobs#error-handling)
 
 Use synthetic portfolio data. Bot messages pass through Telegram. With AI consent
 and activation, DeepSeek receives selected bookkeeping keywords, direction and

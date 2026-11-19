@@ -9,7 +9,7 @@ export function renderMonthlyReport(report: Awaited<ReturnType<typeof getTelegra
     const label = report.breakdown.length === 10 ? "Kategori belanja teratas" : "Belanja mengikut kategori";
     return `Laporan perbelanjaan ${month}\nJumlah belanja: ${formatMyr(report.expense)}\n${label}\n${breakdown}`;
   }
-  const recent = report.recent.map((row) => `${row.occurredOn} · ${row.description}: ${formatMyr(row.amount)} (${row.type === "INCOME" ? "pendapatan" : "belanja"})`).join("\n") || "Tiada transaksi.";
+  const recent = report.recent.map((row, index) => `${index + 1}. ${row.occurredOn} · ${row.description}: ${formatMyr(row.amount)} (${row.type === "INCOME" ? "pendapatan" : "belanja"})`).join("\n") || "Tiada transaksi.";
   return `${base}\nBelanja mengikut kategori:\n${breakdown}\nTransaksi terkini:\n${recent}`;
 }
 
@@ -65,7 +65,7 @@ export function renderFinanceAnswer(result: FinanceAnswer) {
     case "TOTAL": return `Jumlah ${result.type === "EXPENSE" ? "belanja" : "pendapatan"} yang direkod untuk ${result.month} ialah ${formatMyr(result.amount)}.`;
     case "REPORT": return renderMonthlyReport(result.report, result.month, result.view);
     case "TOP": return `Kategori belanja tertinggi ${result.month}:\n${result.rows.map((row) => `${row.categoryName}: ${formatMyr(row.amount)}`).join("\n") || "Tiada belanja."}`;
-    case "BUDGET": return `Bajet ${result.month}:\n${result.rows.map((row) => `${row.categoryName}: belanja ${formatMyr(row.spent)} / ${formatMyr(row.limit)}; baki ${formatMyr(row.remaining)} (${row.percent}%)`).join("\n") || "Tiada bajet. Tetapkan bajet di web."}`;
-    case "RECENT": return `Transaksi terkini:\n${result.rows.map((row) => `${row.occurredOn} · ${row.description}: ${formatMyr(row.amount)} (${row.type === "INCOME" ? "pendapatan" : "belanja"})`).join("\n") || "Tiada transaksi."}`;
+    case "BUDGET": return `Bajet ${result.month}:\n${result.rows.map((row) => `${row.categoryName}: belanja ${formatMyr(row.spent)} / ${formatMyr(row.limit)}; baki ${formatMyr(row.remaining)} (${row.percent}%)`).join("\n") || `Tiada bajet. Cuba ‘Bajet makan ${result.month} RM400’.`}`;
+    case "RECENT": return `Transaksi terkini:\n${result.rows.map((row, index) => `${index + 1}. ${row.occurredOn} · ${row.description}: ${formatMyr(row.amount)} (${row.type === "INCOME" ? "pendapatan" : "belanja"})`).join("\n") || "Tiada transaksi."}`;
   }
 }

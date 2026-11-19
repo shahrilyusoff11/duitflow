@@ -6,6 +6,7 @@ import { billPaymentSchema, billSchema, billVersionSchema, budgetSchema, categor
 import { monthRange, parseDate, shiftMonth, todayInMalaysia } from "./dates";
 import { budgetProgress, Decimal } from "./money";
 import { billDueDate, billsDueBetween } from "./bill-schedule";
+import { lockLedgerRecord, restoreBillPayment, saveBillPayment } from "./bill-payments";
 import type { z } from "zod";
 
 export class FinanceError extends Error {
@@ -77,6 +78,9 @@ export async function updateTransaction(userId: string, transactionId: string, i
   const id = idSchema.parse(transactionId);
   const data = transactionSchema.parse(input);
   await getDatabase().$transaction(async (tx) => {
+    const existing = await lockLedgerRecord(tx, userId, id);
+    if (!existing) throw new FinanceError("NOT_FOUND");
+    if (existing.billId && data.type !== "EXPENSE") throw new FinanceError("BILL_CHANGED");
     await checkCategory(tx, userId, data.categoryId, data.type);
     found((await tx.transaction.updateMany({ where: { id, userId }, data: { ...data, amount: new Decimal(data.amount), occurredOn: parseDate(data.occurredOn) } })).count);
   });
@@ -85,7 +89,12 @@ export async function updateTransaction(userId: string, transactionId: string, i
 export async function deleteTransaction(userId: string, transactionId: string) {
   await authorize(userId, true);
   const id = idSchema.parse(transactionId);
-  found((await getDatabase().transaction.deleteMany({ where: { id, userId } })).count);
+  await getDatabase().$transaction(async (tx) => {
+    const record = await lockLedgerRecord(tx, userId, id);
+    if (!record) throw new FinanceError("NOT_FOUND");
+    if (record.billId && !await restoreBillPayment(tx, userId, record)) throw new FinanceError("BILL_CHANGED");
+    found((await tx.transaction.deleteMany({ where: { id, userId } })).count);
+  });
 }
 
 export async function getTransaction(userId: string, transactionId: string) {
@@ -140,12 +149,14 @@ export async function deleteBudget(userId: string, budgetId: string) {
 
 const billSelect = {
   id: true, name: true, amount: true, categoryId: true, cadence: true, nextDueOn: true,
-  active: true, version: true, category: { select: { name: true } },
+  active: true, version: true, paymentLimit: true, endsOn: true, paymentsMade: true, completed: true,
+  category: { select: { name: true } },
 } satisfies Prisma.RecurringBillSelect;
 
 function serializeBill(row: Prisma.RecurringBillGetPayload<{ select: typeof billSelect }>) {
   const { category, ...bill } = row;
-  return { ...bill, categoryName: category.name, amount: bill.amount.toFixed(2), nextDueOn: bill.nextDueOn.toISOString().slice(0, 10) };
+  return { ...bill, categoryName: category.name, amount: bill.amount.toFixed(2), nextDueOn: bill.nextDueOn.toISOString().slice(0, 10),
+    endsOn: bill.endsOn?.toISOString().slice(0, 10) ?? null };
 }
 
 export async function listBills(userId: string) {
@@ -167,7 +178,7 @@ export async function getUpcomingBills(userId: string, now = new Date()) {
   end.setUTCDate(end.getUTCDate() + 30);
   const rows = await getDatabase().recurringBill.findMany({
     where: { userId, active: true, nextDueOn: { lt: end } },
-    select: { id: true, name: true, amount: true, cadence: true, nextDueOn: true, dayOfMonth: true },
+    select: { id: true, name: true, amount: true, cadence: true, nextDueOn: true, dayOfMonth: true, paymentLimit: true, endsOn: true, paymentsMade: true },
     orderBy: [{ nextDueOn: "asc" }, { id: "asc" }],
   });
   let total = new Decimal(0);
@@ -204,10 +215,16 @@ export async function updateBill(userId: string, billId: string, expectedVersion
   const data = billSchema.parse(input);
   const nextDueOn = parseDate(data.nextDueOn);
   await getDatabase().$transaction(async (tx) => {
-    const current = await tx.recurringBill.findFirst({ where, select: { nextDueOn: true, dayOfMonth: true } });
-    if (!current) throw new FinanceError("BILL_CHANGED");
-    await checkCategory(tx, userId, data.categoryId, "EXPENSE");
+    const current = await tx.recurringBill.findFirst({ where, select: {
+      nextDueOn: true, dayOfMonth: true, endsOn: true, paymentLimit: true, paymentsMade: true, cadence: true, completed: true,
+    } });
+    if (!current || current.completed || (current.endsOn && nextDueOn > current.endsOn) ||
+      ((current.endsOn || current.paymentLimit) && current.cadence !== data.cadence)) throw new FinanceError("BILL_CHANGED");
     const dayOfMonth = nextDueOn.getTime() === current.nextDueOn.getTime() ? current.dayOfMonth : nextDueOn.getUTCDate();
+    if (current.paymentLimit && billDueDate({ cadence: data.cadence, nextDueOn, dayOfMonth }, current.paymentLimit - current.paymentsMade - 1).getUTCFullYear() > 2100) {
+      throw new FinanceError("BILL_CHANGED");
+    }
+    await checkCategory(tx, userId, data.categoryId, "EXPENSE");
     const { count } = await tx.recurringBill.updateMany({ where, data: { ...data, amount: new Decimal(data.amount), nextDueOn, dayOfMonth, version: { increment: 1 } } });
     if (count !== 1) throw new FinanceError("BILL_CHANGED");
   });
@@ -221,17 +238,13 @@ export async function deleteBill(userId: string, billId: string, expectedVersion
 
 export async function recordBillPayment(userId: string, billId: string, expectedVersion: unknown, input: unknown) {
   await authorize(userId, true);
-  const where = { id: idSchema.parse(billId), userId, active: true, version: billVersionSchema.parse(expectedVersion) };
+  const id = idSchema.parse(billId);
+  const version = billVersionSchema.parse(expectedVersion);
   const payment = billPaymentSchema.parse(input);
   return getDatabase().$transaction(async (tx) => {
-    const bill = await tx.recurringBill.findFirst({ where, select: { categoryId: true, nextDueOn: true, dayOfMonth: true, cadence: true } });
-    if (!bill) throw new FinanceError("BILL_CHANGED");
-    const nextDueOn = billDueDate(bill, 1);
-    const schedule = nextDueOn.getUTCFullYear() <= 2100 ? { nextDueOn } : { active: false };
-    // Claim this version before inserting. A stale form cannot record another payment.
-    const { count } = await tx.recurringBill.updateMany({ where, data: { ...schedule, version: { increment: 1 } } });
-    if (count !== 1) throw new FinanceError("BILL_CHANGED");
-    return insertWebTransaction(tx, userId, { ...payment, categoryId: bill.categoryId, type: "EXPENSE" });
+    const result = await saveBillPayment(tx, userId, id, version, payment, "WEB");
+    if (!result) throw new FinanceError("BILL_CHANGED");
+    return serializeTransaction(result.record);
   });
 }
 

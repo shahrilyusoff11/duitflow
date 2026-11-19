@@ -19,6 +19,10 @@ test("private endpoints remain uncached, unindexed and session or secret protect
   const webhook = await request.post("/api/telegram/webhook", { data: {} });
   expect(webhook.status()).toBe(401);
   expect(webhook.headers()["x-robots-tag"]).toBe("noindex, nofollow");
+  const notifications = await request.get("/api/telegram/notifications");
+  expect(notifications.status()).toBe(401);
+  expect(notifications.headers()["cache-control"]).toContain("no-store");
+  expect(notifications.headers()["x-robots-tag"]).toBe("noindex, nofollow");
   const signIn = await request.get("/sign-in");
   expect(signIn.headers()["x-robots-tag"]).toBe("noindex, nofollow");
   const robots = await request.get("/robots.txt");

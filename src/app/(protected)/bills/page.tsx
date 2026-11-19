@@ -3,12 +3,13 @@ import { requirePageUser } from "@/lib/auth/session";
 import { listBills, listCategories } from "@/lib/finance/dal";
 import { displayDate, todayInMalaysia } from "@/lib/finance/dates";
 import { formatMyr } from "@/lib/finance/money";
+import { billScheduleLabel } from "@/lib/finance/bill-schedule";
 import { MutationForm } from "@/components/finance/mutation-form";
 import { CategorySelect, type Categories } from "@/components/finance/views";
 import { Icon } from "@/components/icon";
 import "./bills.css";
 
-export const metadata = { title: "Bil berulang — DuitFlow" };
+export const metadata = { title: "Bil dan ansuran — DuitFlow" };
 
 type Bill = Awaited<ReturnType<typeof listBills>>[number];
 const cadenceLabels = { MONTHLY: "Setiap bulan", YEARLY: "Setiap tahun" };
@@ -18,10 +19,10 @@ function BillFields({ categories, today, bill }: { categories: Categories; today
     <label>Nama bil<input name="name" defaultValue={bill?.name} maxLength={80} required /></label>
     <label>Amaun (MYR)<input name="amount" inputMode="decimal" defaultValue={bill?.amount} placeholder="RM129.00" maxLength={80} required /></label>
     <CategorySelect categories={categories} value={bill?.categoryId} expenseOnly />
-    <label>Tarikh bil seterusnya<input name="nextDueOn" type="date" defaultValue={bill?.nextDueOn ?? today} min="2000-01-01" max="2100-12-31" required /></label>
-    <label className="bill-short-field">Kekerapan<select name="cadence" defaultValue={bill?.cadence ?? "MONTHLY"}>
+    <label>Tarikh bil seterusnya<input name="nextDueOn" type="date" defaultValue={bill?.nextDueOn ?? today} min="2000-01-01" max={bill?.endsOn ?? "2100-12-31"} required /></label>
+    {bill && (bill.paymentLimit || bill.endsOn) ? <input type="hidden" name="cadence" value={bill.cadence} /> : <label className="bill-short-field">Kekerapan<select name="cadence" defaultValue={bill?.cadence ?? "MONTHLY"}>
       <option value="MONTHLY">{cadenceLabels.MONTHLY}</option><option value="YEARLY">{cadenceLabels.YEARLY}</option>
-    </select></label>
+    </select></label>}
     <label className="bill-short-field">Status<select name="active" defaultValue={bill?.active === false ? "no" : "yes"}>
       <option value="yes">Aktif</option><option value="no">Dijeda</option>
     </select></label>
@@ -35,12 +36,13 @@ export default async function BillsPage() {
   const groups = [
     { id: "tertunggak", title: "Tertunggak", rows: bills.filter((bill) => bill.active && bill.nextDueOn < today) },
     { id: "dijadualkan", title: "Dijadualkan", rows: bills.filter((bill) => bill.active && bill.nextDueOn >= today) },
-    { id: "dijeda", title: "Dijeda", rows: bills.filter((bill) => !bill.active) },
+    { id: "dijeda", title: "Dijeda", rows: bills.filter((bill) => !bill.active && !bill.completed) },
+    { id: "selesai", title: "Selesai", rows: bills.filter((bill) => bill.completed) },
   ];
 
   return <>
     <header className="workspace-heading">
-      <h1 className="account-title">Bil berulang</h1>
+      <h1 className="account-title">Bil dan ansuran</h1>
       <a className="button" href="#tambah-bil"><Icon name="plus" size={17} />Tambah bil</a>
     </header>
     <div className="manage-layout">
@@ -52,24 +54,24 @@ export default async function BillsPage() {
               <div className="bill-record-heading">
                 <div>
                   <h3>{bill.name}</h3>
-                  <p>{bill.categoryName} · {cadenceLabels[bill.cadence]}</p>
+                  <p>{bill.categoryName} · {billScheduleLabel(bill)}</p>
                 </div>
                 <strong>{formatMyr(bill.amount)}</strong>
               </div>
               <div className="bill-record-actions">
-                <p>Tarikh bil <time dateTime={bill.nextDueOn}>{displayDate(bill.nextDueOn)}</time></p>
+                <p>{bill.completed ? "Tarikh bil terakhir" : "Tarikh bil"} <time dateTime={bill.nextDueOn}>{displayDate(bill.nextDueOn)}</time></p>
                 {bill.active && <Link className="quiet-button" href={`/bills/${bill.id}/payment`}>Rekod bayaran <Icon name="arrow" size={15} /></Link>}
               </div>
               <details className="bill-editor">
-                <summary>Ubah bil</summary>
-                <MutationForm operation="updateBill" id={bill.id} version={bill.version}>
+                <summary>{bill.completed ? "Urus bil selesai" : "Ubah bil"}</summary>
+                {!bill.completed && <MutationForm operation="updateBill" id={bill.id} version={bill.version}>
                   <BillFields categories={categories} today={today} bill={bill} />
-                </MutationForm>
+                </MutationForm>}
                 <MutationForm operation="deleteBill" id={bill.id} version={bill.version} label="Padam bil" destructive />
               </details>
             </section>),
           ])}
-        </div> : <section className="account-card"><h2>Bil anda</h2><p>Belum ada bil berulang.</p></section>}
+        </div> : <section className="account-card"><h2>Bil anda</h2><p>Belum ada bil.</p></section>}
       </div>
       <section className="account-card manage-create bill-create" id="tambah-bil" tabIndex={-1} aria-labelledby="add-bill-heading">
         <h2 id="add-bill-heading">Tambah bil</h2>

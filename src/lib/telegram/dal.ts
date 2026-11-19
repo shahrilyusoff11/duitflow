@@ -11,39 +11,16 @@ import { idSchema, monthSchema, transactionSchema } from "@/lib/finance/validati
 import { pendingClarificationSchema, pendingProposalSchema } from "./schemas";
 import { financeQuerySchema, financeTopicSchema } from "@/lib/ai/schemas";
 import { matchCategory } from "@/lib/ai/interpret";
-import { billDueDate } from "@/lib/finance/bill-schedule";
+import { billAfterPayment, billScheduleLabel } from "@/lib/finance/bill-schedule";
+import { saveBillPayment } from "@/lib/finance/bill-payments";
+import { authorizeTelegram, lockUser, telegramId, TelegramAccessError } from "./access";
+import { applyFinanceMutation } from "./records";
 
-const telegramId = z.string().regex(/^[1-9]\d{0,19}$/);
+export { TelegramAccessError } from "./access";
 const linkToken = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 const actionId = z.uuid();
 const ttl = 10 * 60 * 1000;
 type Tx = Prisma.TransactionClient;
-
-export class TelegramAccessError extends Error {
-  constructor() { super("TELEGRAM_NOT_LINKED"); }
-}
-
-async function lockUser(tx: Tx, userId: string) {
-  idSchema.parse(userId);
-  // Share a row lock with unlink, redemption and approval. An unlink cannot
-  // commit between authorization and a Telegram mutation or scoped read.
-  const users = await tx.$queryRaw<Array<{ isDemo: boolean }>>`
-    SELECT "isDemo" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
-  return users[0];
-}
-
-async function authorizeTelegram(tx: Tx, userId: string, sender: string) {
-  telegramId.parse(sender);
-  const user = await lockUser(tx, userId);
-  if (!user || user.isDemo) throw new TelegramAccessError();
-  // Lock the connection itself. A repeatable-read snapshot that still sees a
-  // connection deleted by unlink must fail the lock instead of authorizing.
-  const [connection] = await tx.$queryRaw<Array<{ id: string }>>`
-    SELECT "id" FROM "TelegramConnection"
-    WHERE "userId" = ${userId} AND "telegramUserId" = ${sender} FOR UPDATE`;
-  if (!connection) throw new TelegramAccessError();
-  return connection;
-}
 
 async function authorizeBrowser(userId: string) {
   await requireUser(userId);
@@ -347,7 +324,7 @@ export async function queryTelegramFinance(userId: string, sender: string, input
         }) };
       }
       case "recent_transactions": {
-        const rows = await tx.transaction.findMany({ where: { userId }, orderBy: [{ occurredOn: "desc" }, { id: "desc" }], take: query.limit, select: { description: true, amount: true, type: true, occurredOn: true } });
+        const rows = await tx.transaction.findMany({ where: { userId }, orderBy: [{ occurredOn: "desc" }, { id: "desc" }], take: query.limit, select: { id: true, description: true, amount: true, type: true, occurredOn: true } });
         return { kind: "RECENT" as const, rows: rows.map((row) => ({ ...row, amount: row.amount.toFixed(2), occurredOn: row.occurredOn.toISOString().slice(0, 10) })) };
       }
     }
@@ -361,21 +338,40 @@ export async function getPendingAction(userId: string, sender: string) {
   });
 }
 
-export async function getTelegramBills(userId: string, sender: string, filter?: { name: string } | { next: true }, now = new Date()) {
+export async function getTelegramBills(userId: string, sender: string, filter?: { name: string; includeCompleted?: boolean } | { next: true; installmentsOnly?: boolean } | { ids: string[] } | { all: true }, now = new Date()) {
   const billName = filter && "name" in filter ? z.string().trim().min(1).max(80).parse(filter.name) : undefined;
   const next = filter && "next" in filter;
   const start = parseDate(todayInMalaysia(now));
   const end = new Date(start);
   end.setUTCDate(end.getUTCDate() + 30);
-  const selection = billName ? { name: { equals: billName, mode: "insensitive" as const } } : { nextDueOn: next ? { gte: start } : { lt: end } };
+  const ids = filter && "ids" in filter ? filter.ids.map((id) => idSchema.parse(id)) : undefined;
+  const selection: Prisma.RecurringBillWhereInput = ids ? { id: { in: ids } }
+    : billName ? { name: { equals: billName, mode: "insensitive" } }
+    : filter && "all" in filter ? {} : { nextDueOn: next ? { gte: start } : { lt: end } };
+  const allowCompleted = ids || (filter && "name" in filter && filter.includeCompleted);
   return getDatabase().$transaction(async (tx) => {
     await authorizeTelegram(tx, userId, sender);
     const rows = await tx.recurringBill.findMany({
-      where: { userId, active: true, ...selection },
-      select: { id: true, name: true, amount: true, nextDueOn: true, cadence: true, version: true },
-      orderBy: [{ nextDueOn: "asc" }, { id: "asc" }], take: next ? 1 : billName ? 2 : 11,
+      where: {
+        userId, ...(allowCompleted ? { OR: [{ active: true }, { completed: true }] } : { active: true }), ...selection,
+        ...(filter && "next" in filter && filter.installmentsOnly ? { OR: [{ paymentLimit: { gt: 1 } }, { endsOn: { not: null } }] } : {}),
+      },
+      select: { id: true, name: true, amount: true, nextDueOn: true, cadence: true, version: true, dayOfMonth: true,
+        active: true, completed: true, paymentLimit: true, endsOn: true, paymentsMade: true },
+      orderBy: [{ nextDueOn: "asc" }, { id: "asc" }], take: next ? 1 : 11,
     });
-    return rows.map((row) => ({ ...row, amount: row.amount.toFixed(2), nextDueOn: row.nextDueOn.toISOString().slice(0, 10) }));
+    return rows.map((row) => {
+      const next = row.active ? billAfterPayment(row) : null;
+      const endsOn = row.endsOn?.toISOString().slice(0, 10) ?? null;
+      return {
+        ...row, amount: row.amount.toFixed(2), nextDueOn: row.nextDueOn.toISOString().slice(0, 10), endsOn,
+        progress: row.paymentLimit || endsOn ? billScheduleLabel({ ...row, endsOn }) : "",
+        scheduleAfter: next ? {
+          nextDueOn: next.active ? next.nextDueOn.toISOString().slice(0, 10) : null,
+          progress: row.paymentLimit || endsOn ? billScheduleLabel({ ...row, endsOn, paymentsMade: next.paymentsMade }) : "",
+        } : undefined,
+      };
+    });
   });
 }
 
@@ -428,10 +424,10 @@ export async function cancelPendingAction(userId: string, sender: string, id?: s
   });
 }
 
-async function insertTelegramTransaction(tx: Tx, userId: string, proposed: z.output<typeof transactionSchema>) {
+async function insertTelegramTransaction(tx: Tx, userId: string, proposed: z.output<typeof transactionSchema>, createdAt: Date) {
   if (!await tx.category.findFirst({ where: { id: proposed.categoryId, userId, transactionType: proposed.type }, select: { id: true } })) throw new TelegramAccessError();
   const record = await tx.transaction.create({
-    data: { ...proposed, amount: new Decimal(proposed.amount), occurredOn: parseDate(proposed.occurredOn), userId, source: "TELEGRAM" },
+    data: { ...proposed, amount: new Decimal(proposed.amount), occurredOn: parseDate(proposed.occurredOn), createdAt, userId, source: "TELEGRAM" },
     include: { category: { select: { name: true } } },
   });
   return { id: record.id, categoryName: record.category.name, amount: record.amount.toFixed(2), type: record.type, description: record.description, occurredOn: record.occurredOn.toISOString().slice(0, 10) };
@@ -440,7 +436,7 @@ async function insertTelegramTransaction(tx: Tx, userId: string, proposed: z.out
 export async function approvePendingAction(userId: string, sender: string, id: string) {
   actionId.parse(id);
   return getDatabase().$transaction(async (tx) => {
-    await authorizeTelegram(tx, userId, sender);
+    const connection = await authorizeTelegram(tx, userId, sender);
     const now = new Date();
     const where = { id, userId, telegramUserId: sender, kind: "PROPOSAL" as const, consumedAt: null, expiresAt: { gt: now } };
     const row = await tx.pendingTelegramAction.findFirst({ where, select: { payload: true } });
@@ -455,25 +451,27 @@ export async function approvePendingAction(userId: string, sender: string, id: s
         if (await tx.recurringBill.findFirst({ where: { userId, active: true, name: { equals: bill.name, mode: "insensitive" } }, select: { id: true } })) return { kind: "BILL_CHANGED" as const };
         const nextDueOn = parseDate(bill.nextDueOn);
         const created = await tx.recurringBill.create({
-          data: { ...bill, userId, active: true, amount: new Decimal(bill.amount), nextDueOn, dayOfMonth: nextDueOn.getUTCDate() },
-          select: { name: true, amount: true, nextDueOn: true },
+          data: { ...bill, userId, active: true, amount: new Decimal(bill.amount), nextDueOn,
+            endsOn: bill.endsOn ? parseDate(bill.endsOn) : null, dayOfMonth: nextDueOn.getUTCDate() },
+          select: { id: true, name: true, amount: true, nextDueOn: true },
         });
-        return { kind: "BILL_CREATED" as const, name: created.name, amount: created.amount.toFixed(2), nextDueOn: created.nextDueOn.toISOString().slice(0, 10) };
+        return { kind: "BILL_CREATED" as const, id: created.id, name: created.name, amount: created.amount.toFixed(2), nextDueOn: created.nextDueOn.toISOString().slice(0, 10) };
       }
-      const billWhere = { id: payload.billId, userId, active: true, version: payload.version, nextDueOn: parseDate(payload.nextDueOn) };
-      const bill = await tx.recurringBill.findFirst({ where: billWhere, select: { categoryId: true, nextDueOn: true, dayOfMonth: true, cadence: true } });
-      if (!bill) return { kind: "BILL_CHANGED" as const };
-      const nextDueOn = billDueDate(bill, 1);
-      const keepActive = nextDueOn.getUTCFullYear() <= 2100;
-      const schedule = keepActive ? { nextDueOn } : { active: false };
-      const { count } = await tx.recurringBill.updateMany({ where: billWhere, data: { ...schedule, version: { increment: 1 } } });
-      if (count !== 1) return { kind: "BILL_CHANGED" as const };
-      const payment = await insertTelegramTransaction(tx, userId, { ...payload.payment, categoryId: bill.categoryId, type: "EXPENSE" });
-      return { kind: "BILL_PAID" as const, payment, nextDueOn: keepActive ? nextDueOn.toISOString().slice(0, 10) : null };
+      if (payload.operation === "pay_bill") {
+        const result = await saveBillPayment(tx, userId, payload.billId, payload.version, payload.payment, "TELEGRAM", payload.nextDueOn);
+        if (!result) return { kind: "BILL_CHANGED" as const };
+        return {
+          kind: "BILL_PAID" as const, billId: payload.billId,
+          payment: { id: result.record.id, description: result.record.description, amount: result.record.amount.toFixed(2),
+            occurredOn: result.record.occurredOn.toISOString().slice(0, 10) },
+          nextDueOn: result.nextDueOn?.toISOString().slice(0, 10) ?? null,
+        };
+      }
+      return applyFinanceMutation(tx, userId, connection.id, payload);
     }
     const saved = [];
-    for (const proposed of payload.transactions) {
-      saved.push(await insertTelegramTransaction(tx, userId, proposed));
+    for (const [index, proposed] of payload.transactions.entries()) {
+      saved.push(await insertTelegramTransaction(tx, userId, proposed, new Date(now.getTime() - payload.transactions.length + index + 1)));
     }
     return saved;
   });
@@ -489,7 +487,7 @@ export async function getTelegramReport(userId: string, sender: string, month: s
     const expense = totals.find((row) => row.type === "EXPENSE")?._sum.amount ?? new Decimal(0);
     const grouped = await tx.transaction.groupBy({ by: ["categoryId"], where: { ...where, type: "EXPENSE" }, _sum: { amount: true }, orderBy: { _sum: { amount: "desc" } }, take: 10 });
     const categories = await tx.category.findMany({ where: { userId, id: { in: grouped.map((row) => row.categoryId) } }, select: { id: true, name: true } });
-    const recent = await tx.transaction.findMany({ where, orderBy: [{ occurredOn: "desc" }, { id: "desc" }], take: 5, select: { amount: true, type: true, description: true, occurredOn: true } });
+    const recent = await tx.transaction.findMany({ where, orderBy: [{ occurredOn: "desc" }, { id: "desc" }], take: 5, select: { id: true, amount: true, type: true, description: true, occurredOn: true } });
     return { income: income.toFixed(2), expense: expense.toFixed(2), net: income.minus(expense).toFixed(2),
       breakdown: grouped.map((row) => ({ categoryName: categories.find((category) => category.id === row.categoryId)!.name, amount: row._sum.amount!.toFixed(2) })),
       recent: recent.map((row) => ({ ...row, amount: row.amount.toFixed(2), occurredOn: row.occurredOn.toISOString().slice(0, 10) })) };
