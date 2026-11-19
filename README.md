@@ -12,9 +12,8 @@ UI uses Bahasa Melayu, MYR and Malaysian calendar dates.
 pass. The owner confirmed real GitHub sign-in/out/re-login, synthetic web CRUD,
 Telegram linking and one confirmed bot expense with no duplicate on re-tap.
 Bot: [@duitflow00bot](https://t.me/duitflow00bot). DeepSeek Flash is available
-in Production for Telegram users who opt in from Settings. The bill schedules
-and expanded Telegram features are available in this checkout and await a
-production release.
+in Production for Telegram users who opt in from Settings. The 19 November
+release includes the expanded bill schedules and Telegram finance tools.
 
 - [Implementation evidence and acceptance status](docs/STATUS.md)
 - [Actual Vercel setup and release record](docs/VERCEL_SETUP.md)
@@ -313,9 +312,9 @@ Provider HTTP is mocked; CI makes no live AI calls. The app contains no test
 login endpoint or session bypass.
 
 The 19 November 2026 local Telegram update passed Prisma validation, lint,
-typecheck, **364 unit and integration tests**, the production build and
+typecheck, **379 unit and integration tests**, the production build and
 **36 desktop and mobile Chromium tests**. Prisma applied the reviewed migrations
-to a disposable database for the browser suite. [Local test results](docs/STATUS.md#telegram-finance-tools-and-notifications--19-november-2026)
+to a disposable database for the browser suite. [Local test results](docs/STATUS.md#deepseek-telegram-message-interpretation--19-november-2026)
 
 [Release CI run 43702137694](https://github.com/shahrilyusoff11/duitflow/actions/runs/43702137694)
 passed on deployed source `9bd3995bc28f21530a440ea7f59d34048343598a`: install,
@@ -326,12 +325,12 @@ CI fixture failure, repair, local checks and hosted evidence separately.
 
 ## Deployment, privacy and limits
 
-The approved manual CLI release is live on Vercel Hobby. The public landing,
+The 19 November release is live on Vercel Hobby. The public landing,
 demo and sign-in return 200; anonymous profile access returns 401 and dashboard
 access redirects to sign-in. The hosted headless `verify:app` check passed
 browser → readiness handler → Prisma → existing Neon, with zero client errors.
-Generated deployment URLs remain protected; no Git auto-deploy integration is
-configured. An earlier five-minute runtime-log window contained a `pg` SSL-mode
+Generated deployment URLs remain protected. An earlier five-minute
+runtime-log window contained a `pg` SSL-mode
 future-deprecation warning on a healthy readiness request, with no observed
 request failures. After the owner smoke, hosted readiness passed again with
 zero browser errors; the final deployment's recent five-minute request-log
@@ -354,16 +353,15 @@ personal, non-commercial portfolio. Optional DeepSeek Flash inference is metered
 separately. Neon autosuspend and hosting cold starts
 can delay requests. Free capacity/history/recovery are limited; there is no
 backup automation or CSV export. Do not keep the only copy of important records
-here. The local notification implementation uses Vercel Cron and the existing
+here. Telegram notifications use Vercel Cron and the existing
 PostgreSQL database.
 
-The Telegram finance tools and notifications are awaiting a separate production
-release approval. Before going live, apply the pending reviewed migrations,
-including `20261119000001_telegram_finance_tools` and
-`20261119000002_deepseek_chat_consent`, configure a server-only
-`CRON_SECRET` in Vercel Production, deploy, and verify the synthetic chat and
-scheduled delivery flows. Vercel does not automatically retry failed cron runs.
-[Implementation status](docs/STATUS.md) · [Vercel cron management](https://vercel.com/docs/schedules/cron-jobs/manage-cron-jobs#error-handling)
+The production database has applied the Telegram and DeepSeek consent
+migrations. Vercel registered the daily Telegram notification job and uses a
+Production-only `CRON_SECRET`. The first scheduled delivery and the new
+signed-in Telegram flows still need live verification. Vercel does not
+automatically retry failed cron runs.
+[Production release](docs/STATUS.md#production-release--19-november-2026) · [Vercel cron management](https://vercel.com/docs/schedules/cron-jobs/manage-cron-jobs#error-handling)
 
 Use synthetic portfolio data. Bot messages pass through Telegram. See the
 [optional AI disclosure](docs/AI_SETUP.md) for the provider payload. No credentials,

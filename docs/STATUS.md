@@ -8,6 +8,32 @@ smoke checks. Approved real auth and synthetic finance/bot writes occurred;
 no schema migration, new application dependency or paid service was introduced in Phase 5.
 The hosted release offers DeepSeek Flash with per-user opt-in.
 
+## Production release — 19 November 2026
+
+- [x] [DuitFlow production](https://duitflow-lyart.vercel.app) serves
+  `d3432f269cdf80b1ecebfbbb8867af3fa4bdbeb7` from the READY deployment
+  `dpl_53K7V5Vwjb65oq6sDCThae9KsLtB`. The protected CLI build
+  `dpl_3Cx2zEBVwhvdXP3fEuV35couMW5A` was checked before promotion.
+  Vercel resolved the public domain to the Git-sourced deployment for the same
+  commit after promotion. The previous live deployment was
+  `dpl_6VhVZRVKVeFuBF2nRzLQzRxf7uou`.
+- [x] Prisma applied `20261118000002_telegram_privacy`,
+  `20261119000000_telegram_finance_topic`, `20261119000001_telegram_finance_tools`
+  and `20261119000002_deepseek_chat_consent` to the existing Neon `production`
+  branch. `npm run db:status` confirmed all nine migrations are up to date.
+- [x] Public browser readiness returned 200 through Prisma and Neon, with zero
+  client errors. The demo returned 200, anonymous Settings redirected to
+  sign-in, and the profile route denied anonymous access.
+- [x] The production webhook returned 401 without a secret and 200 for an
+  authenticated empty update. Telegram reported the canonical URL, both
+  expected update types, one connection and zero pending updates.
+- [x] Vercel has a Production-only `CRON_SECRET` and registered the daily
+  `0 1 * * *` notifications job against the active deployment. The public cron
+  endpoint returned 401 without authorization.
+- [ ] The first scheduled delivery and the new signed-in chat flows still
+  need live functional verification. Local mocks cover bill confirmation,
+  replay, consent, follow-ups and notification delivery.
+
 ## DeepSeek Telegram message interpretation — 19 November 2026
 
 - [x] The local parser handles commands, clear messages, clarification replies
@@ -27,7 +53,8 @@ The hosted release offers DeepSeek Flash with per-user opt-in.
 - [x] Tetapan explains the data sent and requires fresh consent. The additive
   `20261119000002_deepseek_chat_consent` migration defaults off even for
   earlier category-only opt-ins.
-- [ ] Production migration and deployment require a separate release request.
+- [x] The owner authorized the production release and migration. See the
+  deployment and hosted checks above.
 
 ### Local automated checks
 
@@ -93,10 +120,9 @@ recorded in [AI setup](AI_SETUP.md).
   `20261119000001_telegram_finance_tools` keeps existing connections, bills and
   expenses, and defaults notifications off. Telegram declines legacy undo
   where historical bill associations cannot be established.
-- [ ] Before live use, obtain separate release approval, apply the pending
-  reviewed migrations including `20261119000001_telegram_finance_tools`,
-  configure a Production-only `CRON_SECRET`, deploy, and verify a synthetic
-  chat payment/undo, replay and scheduled delivery on the approved release.
+- [x] The finance-tools migration and app are live. Vercel registered the
+  schedule using the Production-only `CRON_SECRET`. See the release above
+  for hosted checks and remaining functional verification.
 
 The webhook tests use synthetic records, disposable PostgreSQL and mocked
 Telegram transport. They cover the example phrases, wrong or ambiguous matches,
@@ -139,8 +165,7 @@ both browser projects and in the full rerun.
   existing-link migration, Malaysian month boundaries, owner isolation, expired
   topics, cancellation followed by an older update, and simulated purchases with
   an active approval. Provider and Telegram delivery were mocked in webhook tests.
-- [ ] Production needs migration `20261119000000_telegram_finance_topic`
-  and deployment before the live bot can use this feature.
+- [x] The finance-topic migration and app are live. See the release above.
 
 ## Telegram conversation and bills — 19 November 2026
 
@@ -161,9 +186,8 @@ both browser projects and in the full rerun.
   mocked Telegram transport and disposable PostgreSQL. They covered casual
   queries, multi-purchase approval, owner isolation, bill clarification,
   repeat taps, and stale payment proposals.
-- [ ] Deploy and verify the conversation update in the live bot. This change
-  uses the existing schema. No production data or provider configuration was
-  changed by these checks.
+- [x] The conversation update is live. See the release above for operational
+  checks and remaining live functional verification.
 
 ## Signed-in workspace refresh — 18 November 2026
 
@@ -198,10 +222,9 @@ both browser projects and in the full rerun.
 - [x] Schema validation, lint, typecheck, 338 unit/integration tests, production
   build, and 34 desktop/mobile Chromium tests passed using disposable storage and
   synthetic data. The migration test covered active and terminal legacy rows.
-- [ ] Apply `20261118000002_telegram_privacy` on the intended release database,
-  deploy the updated app, and verify live Telegram behavior and hosted telemetry
-  redaction with synthetic traffic. No production changes or live provider
-  requests were made for this hardening.
+- [x] The privacy migration and app are live. The release above records
+  webhook authorization and registration checks.
+- [ ] Verify hosted telemetry redaction with synthetic traffic.
 
 ## Recurring bills — 18 November 2026
 
@@ -222,7 +245,7 @@ both browser projects and in the full rerun.
   in development. The regression verifies the bill delegate after replacement.
   Lint, typecheck, production build, 324 unit/integration tests and 32 browser
   tests passed after the fix. The restarted localhost passed `verify:app`.
-- [ ] Deploy the recurring-bills app release to Vercel.
+- [x] Recurring bills are live on Vercel. See the production release above.
 
 ## DeepSeek Flash provider change — 18 November 2026
 

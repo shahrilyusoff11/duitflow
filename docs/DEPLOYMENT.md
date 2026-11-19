@@ -9,6 +9,11 @@ Phase 5 is complete. The 18 November update added metered DeepSeek Flash with
 user opt-in. Stretch is unstarted. See
 [the setup record](VERCEL_SETUP.md) and [full verification evidence](STATUS.md).
 
+On 19 November 2026 the owner authorized the next production release and
+its migrations. Vercel now has an existing GitHub connection to `main`.
+See the [production release record](STATUS.md#production-release--19-november-2026)
+for the active deployment, reviewed migrations and hosted checks.
+
 ## Phase 5 release evidence
 
 | Item | Actual result |
@@ -213,9 +218,10 @@ and signup trigger. Never create migrations/reset production. Do not put
 `db:deploy` in every hosting build/preview; migrations are a separate release
 step.
 
-The initial approved CLI publication is recorded above. There is no Git
-auto-deploy integration. If one is proposed later, agree its release policy with
-the owner first: future pushes can publish automatically once it is enabled.
+The initial approved CLI publication is recorded above. The current project
+also has a GitHub connection to `main`, so a push can publish automatically.
+Coordinate any required database migration before publishing a source change
+that depends on it.
 
 Later authorized CLI releases can stage production with `vercel deploy --prod
 --skip-domain`, check it, then assign with `vercel promote <deployment-url>`.
