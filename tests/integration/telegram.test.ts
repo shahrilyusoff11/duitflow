@@ -163,7 +163,7 @@ describe("complete secret-authenticated webhook to Prisma flow", () => {
     await deliver(messageUpdate(405, "/budget 2026-11"));
     expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("Tiada bajet"), undefined);
     await deliver(messageUpdate(406, "/help"));
-    expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("Cakap macam biasa"), undefined);
+    expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("Hari ini saya isi minyak RM60 dan bayar tol RM8"), undefined);
     await deliver(messageUpdate(407, "/link"));
     expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("masukkan kod"), undefined);
     await deliver(messageUpdate(402, "kopi RM8 lepas tu minyak RM40"));

@@ -199,7 +199,7 @@ pending links and proposals. Only linked private-chat users can query records.
 
 You can chat in casual Malay and English:
 
-- `Harini aku beli KFC RM20 dan pergi karaoke 30` proposes two expenses in
+- `Hari ini saya isi minyak RM60 dan bayar tol RM8` proposes two expenses in
   one confirmation.
 - `Aku dapat duit poket daripada abang` asks for the missing amount.
 - `Berapa aku spend bulan ni?` reads the total from your recorded expenses.
@@ -207,7 +207,7 @@ You can chat in casual Malay and English:
 - With DeepSeek enabled, `Duit aku bocor kat mana bulan ni?` and
   `Kategori apa paling banyak aku spend?` both show ranked spending categories.
   Follow with `Kalau bulan lepas?` to see the same answer for the previous month.
-- `Tukar KFC tadi kepada RM25` finds matching transactions dated today in
+- `Tukar tol tadi kepada RM10` finds matching transactions dated today in
   Malaysia and previews the old and new amounts. Reply `yang kedua` if the bot
   lists several matches. `Undo catatan terakhir` previews removal of the most
   recently recorded transaction across web and Telegram.

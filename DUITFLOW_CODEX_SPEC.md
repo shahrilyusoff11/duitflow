@@ -131,7 +131,7 @@ Before writing auth code, check the current status and recommended usage of Auth
 - **Natural-language intake examples:**
   - `Makan nasi ayam RM12`
   - `Tadi beli kopi RM8 lepas tu isi minyak RM40`
-  - `Harini aku beli KFC RM20 dan pergi karaoke 30`
+  - `Hari ini saya isi minyak RM60 dan bayar tol RM8`
   - `Gaji masuk RM2500`
   - `Aku dapat duit poket daripada abang`
   - `Berapa aku spend bulan ni?`

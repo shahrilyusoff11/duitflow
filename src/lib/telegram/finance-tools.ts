@@ -25,7 +25,7 @@ export function parseLedgerChange(text: string) {
   const rawTarget = (edit?.[1] ?? undo![1]).trim().replace(/[.!?]+$/, "");
   const amount = edit ? parseChatAmount(edit[2]) : undefined;
   if (!rawTarget || rawTarget.length > 100 || sensitiveInput.test(rawTarget) || (edit && !amount) || /[?？]/.test(text)) {
-    return { error: "Cuba ‘Tukar KFC tadi kepada RM25’ atau ‘Undo catatan terakhir’." };
+    return { error: "Cuba ‘Tukar tol tadi kepada RM10’ atau ‘Padam transaksi terakhir’." };
   }
   const reference = recordReference(rawTarget);
   const last = /^(?:catatan |transaksi )?(?:terakhir|last)$/i.test(rawTarget);

@@ -4,7 +4,18 @@ import { financeDiscussion, findChatAmounts, incomeWords, leadingTransactionDate
 
 export type TelegramCategory = { id: string; name: string; transactionType: "INCOME" | "EXPENSE" };
 export type ParseResult = { kind: "PROPOSAL"; payload: Proposal } | { kind: "CLARIFICATION"; payload: Clarification } | { kind: "UNSUPPORTED"; message: string };
-const unsupported = (): ParseResult => ({ kind: "UNSUPPORTED", message: "Saya kurang pasti maksud mesej itu. Cuba ‘Harini aku beli KFC RM20 dan karaoke RM30’, ‘Berapa aku spend bulan ni?’ atau ‘Ada bil kena bayar tak?’. Taip /help untuk pilihan lain." });
+const unsupported = (): ParseResult => ({
+  kind: "UNSUPPORTED",
+  message: [
+    "Saya kurang pasti apa yang anda ingin catat atau semak. Cuba salah satu contoh ini.",
+    "",
+    "• Catat belanja — “Semalam saya isi minyak RM60.”",
+    "• Semak perbelanjaan — “Berapa jumlah perbelanjaan saya bulan ini?”",
+    "• Semak bil — “Apakah bil seterusnya?”",
+    "",
+    "Taip /help untuk lihat semua arahan.",
+  ].join("\n"),
+});
 
 const categoryKeywords: Record<string, RegExp> = {
   "Makanan & Minuman": /\b(makan|makanan|minum|minuman|kopi|nasi|sarapan|lunch|dinner|breakfast|coffee|food|kfc|burger|pizza|roti|teh|supper)\b/i,
