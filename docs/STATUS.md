@@ -1,4 +1,4 @@
-# Implementation status — 18 November 2026
+# Implementation status — 19 November 2026
 
 **Phases 1–5 are complete.** The approved Vercel Hobby release and public demo
 are live. Local/CI tests, automated hosted readiness and official Telegram
@@ -7,6 +7,48 @@ requested real OAuth, synthetic web CRUD, Telegram link/approval and replay
 smoke checks. Approved real auth and synthetic finance/bot writes occurred;
 no schema migration, new application dependency or paid service was introduced in Phase 5.
 The hosted release offers DeepSeek Flash with per-user opt-in.
+
+## Telegram financial discussion — 19 November 2026
+
+- [x] Natural-language analysis summarizes recorded income, expenses and
+  net, compares equivalent days for the current month, and identifies the
+  largest expense category and budgets at their warning thresholds.
+- [x] The bot suggests where to review spending, shows trends for two to six
+  months, and simulates how a prospective purchase affects a category budget.
+  Simulations use the ledger and do not create financial records.
+- [x] A validated topic on the linked Telegram connection supports month,
+  suggestion and amount follow-ups for ten minutes. Expiry, cancellation and
+  unlink stop reuse. Context and financial answers stay within DuitFlow.
+- [x] Prisma validation, lint, typecheck, production build, 352 unit/integration
+  tests, and 34 desktop/mobile Chromium tests passed locally. The tests cover
+  existing-link migration, Malaysian month boundaries, owner isolation, expired
+  topics, cancellation followed by an older update, and simulated purchases with
+  an active approval. Provider and Telegram delivery were mocked in webhook tests.
+- [ ] Production needs migration `20261119000000_telegram_finance_topic`
+  and deployment before the live bot can use this feature.
+
+## Telegram conversation and bills — 19 November 2026
+
+- [x] The bot handles greetings, casual meal questions, colloquial Malay and
+  English, multiple purchases, missing-value follow-ups, and recorded income
+  or spending totals. Users can resume a pending clarification after small talk.
+  Complete examples run locally. The optional provider still receives only
+  allowlisted vocabulary and generic categories.
+- [x] Natural-language monthly spending reports show actual totals and a
+  category breakdown. Linked users can ask for the next active due date or
+  list upcoming and overdue bills.
+- [x] Linked users can add a monthly or yearly bill and report payment for an
+  existing bill in chat. The bot asks which bill was paid when the message
+  leaves out the name. Approval advances the schedule and records the expense
+  in the same database transaction.
+- [x] Prisma validation, lint, typecheck, production build, 349 unit/integration
+  tests, and 34 desktop/mobile Chromium tests passed locally. Webhook tests used
+  mocked Telegram transport and disposable PostgreSQL. They covered casual
+  queries, multi-purchase approval, owner isolation, bill clarification,
+  repeat taps, and stale payment proposals.
+- [ ] Deploy and verify the conversation update in the live bot. This change
+  uses the existing schema. No production data or provider configuration was
+  changed by these checks.
 
 ## Signed-in workspace refresh — 18 November 2026
 

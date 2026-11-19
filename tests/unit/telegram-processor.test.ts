@@ -12,7 +12,7 @@ vi.mock("@/lib/telegram/transport", () => ({
 }));
 vi.mock("@/lib/ai/parser", async () => {
   const { parseTelegramText } = await import("../../src/lib/telegram/parser");
-  return { parseWithAi: async (_userId: string, _sender: string, text: string, categories: Parameters<typeof parseTelegramText>[1]) => parseTelegramText(text, categories) };
+  return { parseTransactionWithAi: async (_userId: string, _sender: string, text: string, categories: Parameters<typeof parseTelegramText>[1]) => parseTelegramText(text, categories) };
 });
 
 import { processTelegramUpdate } from "../../src/lib/telegram/processor";
@@ -80,7 +80,7 @@ describe("message delivery effect idempotency", () => {
   it("binds new proposals to the update id and renders the DAL's persisted payload", async () => {
     mock.replacePendingAction.mockResolvedValue(stored());
     await processTelegramUpdate(message());
-    expect(mock.replacePendingAction).toHaveBeenCalledWith("synthetic-user", "12345", "PROPOSAL", expect.any(Object), 100);
+    expect(mock.replacePendingAction).toHaveBeenCalledWith("synthetic-user", "12345", "PROPOSAL", expect.any(Object), 100, undefined);
     expect(mock.sendMessage).toHaveBeenLastCalledWith("12345", expect.stringContaining("Original synthetic record"), expect.any(Object));
   });
 

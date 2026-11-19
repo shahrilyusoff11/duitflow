@@ -8,6 +8,7 @@ const categories: TelegramCategory[] = [
   { id: "salary", name: "Gaji", transactionType: "INCOME" },
   { id: "extra", name: "Pendapatan Sampingan", transactionType: "INCOME" },
   { id: "books", name: "Buku", transactionType: "EXPENSE" },
+  { id: "entertainment", name: "Hiburan", transactionType: "EXPENSE" },
 ];
 const now = new Date("2026-10-31T16:30:00.000Z");
 
@@ -46,10 +47,32 @@ describe("bounded deterministic Telegram parser", () => {
     if (result.kind === "PROPOSAL") expect(result.payload.transactions).toMatchObject([{ amount: "8.00", categoryId: "food" }, { amount: "40.00", categoryId: "transport" }]);
   });
 
+  it("inherits a leading date across purchases and keeps a single price for joined foods", () => {
+    expect(parseTelegramText("Semalam aku beli nasi dan ayam RM12, dan karaoke 30.", categories, now)).toMatchObject({
+      kind: "PROPOSAL", payload: { transactions: [
+        { description: "nasi dan ayam", amount: "12.00", occurredOn: "2026-10-31", categoryId: "food" },
+        { description: "karaoke", amount: "30.00", occurredOn: "2026-10-31", categoryId: "entertainment" },
+      ] },
+    });
+    expect(parseTelegramText("Paid RM12 for nasi dan ayam", categories, now)).toMatchObject({
+      kind: "PROPOSAL", payload: { transactions: [{ description: "nasi dan ayam", amount: "12.00" }] },
+    });
+  });
+
+  it.each(["aku nak beli KFC RM20", "aku belum bayar karaoke RM30", "jangan simpan makan RM12", "makan 2 orang"])("does not treat a plan or an internal count as a transaction: %s", (text) => {
+    expect(parseTelegramText(text, categories, now).kind).not.toBe("PROPOSAL");
+  });
+
   it("classifies salary income and conservative seeded categories", () => {
     const result = parseTelegramText("Gaji masuk RM2500", categories, now);
     expect(result.kind).toBe("PROPOSAL");
     if (result.kind === "PROPOSAL") expect(result.payload.transactions[0]).toMatchObject({ type: "INCOME", categoryId: "salary", amount: "2500.00" });
+  });
+
+  it("classifies money received in mid-sentence as income", () => {
+    expect(parseTelegramText("Aku dapat RM50 daripada abang", [
+      ...categories, { id: "other-income", name: "Lain-lain", transactionType: "INCOME" },
+    ], now)).toMatchObject({ kind: "PROPOSAL", payload: { transactions: [{ amount: "50.00", type: "INCOME", categoryId: "other-income" }] } });
   });
 
   it("resolves relative dates on the Malaysian day at month/year boundaries", () => {

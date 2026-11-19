@@ -19,6 +19,7 @@ import { sendMessage, answerCallbackQuery, TelegramTransportError } from "../../
 import { POST } from "../../src/app/api/telegram/webhook/route";
 import { mutateTelegram } from "../../src/app/(protected)/settings/actions";
 import * as updateState from "../../src/lib/telegram/state";
+import { parseDate, todayInMalaysia } from "../../src/lib/finance/dates";
 
 const environment = {
   BETTER_AUTH_URL: "http://localhost:3000", BETTER_AUTH_SECRET: "synthetic-telegram-secret-at-least-32-characters",
@@ -156,7 +157,7 @@ describe("complete secret-authenticated webhook to Prisma flow", () => {
     await deliver(messageUpdate(405, "/budget 2026-11"));
     expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("Tiada bajet"), undefined);
     await deliver(messageUpdate(406, "/help"));
-    expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("DuitFlow: catat belanja"), undefined);
+    expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("Cakap macam biasa"), undefined);
     await deliver(messageUpdate(407, "/link"));
     expect(sendMessage).toHaveBeenCalledWith(sender, expect.stringContaining("masukkan kod"), undefined);
     await deliver(messageUpdate(402, "kopi RM8 lepas tu minyak RM40"));
@@ -164,6 +165,160 @@ describe("complete secret-authenticated webhook to Prisma flow", () => {
     await deliver(messageUpdate(403, "/cancel"));
     expect(await telegram.getPendingAction(alice, sender)).toBeNull();
     expect(await db.prisma.transaction.count()).toBe(1);
+  });
+
+  it("replies to meal small talk without opening or interrupting a financial clarification", async () => {
+    await connect();
+    expect((await deliver(messageUpdate(690, "hello dah makan ke"))).status).toBe(200);
+    expect(sendMessage).toHaveBeenCalledExactlyOnceWith(sender, "Kalau bot boleh makan, saya dah pesan nasi lemak 😄", undefined);
+    expect(await telegram.getPendingAction(alice, sender)).toBeNull();
+    await deliver(messageUpdate(691, "Makan"));
+    const clarification = await telegram.getPendingAction(alice, sender);
+    expect(clarification?.kind).toBe("CLARIFICATION");
+    await deliver(messageUpdate(692, "Awak dah makan?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("nasi lemak"), undefined);
+    expect((await telegram.getPendingAction(alice, sender))?.id).toBe(clarification?.id);
+    await deliver(messageUpdate(693, "RM12"));
+    expect(await telegram.getPendingAction(alice, sender)).toMatchObject({
+      kind: "PROPOSAL", payload: { transactions: [{ amount: "12.00", categoryId: food }] },
+    });
+    expect(await db.prisma.transaction.count()).toBe(0);
+  });
+
+  it("handles greetings, a multi-purchase message, missing amounts and monthly totals in casual Malay", async () => {
+    await connect();
+    await deliver(messageUpdate(700, "hi"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Hai!"), undefined);
+    await deliver(messageUpdate(701, "Harini aku beli KFC RM20 dan pergi karaoke 30"));
+    const purchases = await telegram.getPendingAction(alice, sender);
+    expect(purchases).toMatchObject({ kind: "PROPOSAL", payload: { transactions: [
+      { description: "KFC", amount: "20.00", categoryId: food, type: "EXPENSE" },
+      { description: "karaoke", amount: "30.00", type: "EXPENSE" },
+    ] } });
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringMatching(/Makanan & Minuman[\s\S]*Hiburan/), expect.anything());
+    expect(await db.prisma.transaction.count()).toBe(0);
+    await deliver(callbackUpdate(702, purchases!.id));
+    await db.prisma.transaction.create({ data: { userId: bob, categoryId: foreignCategory, amount: "999", description: "Synthetic foreign", occurredOn: parseDate(todayInMalaysia()), type: "EXPENSE", source: "WEB" } });
+    await deliver(messageUpdate(703, "Hi, berapa aku spend bulan ni."));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringMatching(/Jumlah belanja.*RM 50\.00/), undefined);
+    await deliver(messageUpdate(699, "bagi report perbenjaan ku bulan ni"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender,
+      expect.stringContaining("Jumlah belanja: RM 50.00\nBelanja mengikut kategori\nHiburan: RM 30.00\nMakanan & Minuman: RM 20.00"), undefined);
+
+    await deliver(messageUpdate(704, "aku belanja awek makan"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Berapa amaun"), undefined);
+    await deliver(messageUpdate(705, "RM25 je"));
+    expect((await telegram.getPendingAction(alice, sender))?.payload).toMatchObject({ transactions: [{ amount: "25.00", categoryId: food, type: "EXPENSE" }] });
+
+    await deliver(messageUpdate(706, "aku dapat duit poket daripada abang"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Berapa amaun"), undefined);
+    await deliver(messageUpdate(707, "RM50"));
+    const pocketMoney = await telegram.getPendingAction(alice, sender);
+    expect(pocketMoney).toMatchObject({ kind: "PROPOSAL", payload: { transactions: [{ amount: "50.00", type: "INCOME" }] } });
+    await deliver(callbackUpdate(708, pocketMoney!.id));
+    await deliver(messageUpdate(709, "berapa duit aku dapat bulan ni"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringMatching(/Jumlah pendapatan.*RM 50\.00/), undefined);
+    expect(await db.prisma.transaction.count({ where: { userId: alice } })).toBe(3);
+  });
+
+  it("clarifies, lists, creates and records payment for a bill with separate approvals", async () => {
+    await connect();
+    await db.prisma.recurringBill.create({ data: { userId: bob, categoryId: foreignCategory, name: "ShopeePay", amount: "999.99", cadence: "MONTHLY", nextDueOn: parseDate(todayInMalaysia()), dayOfMonth: 1 } });
+    await deliver(messageUpdate(710, "Ada bil kena bayar tak?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Tiada bil"), undefined);
+    await deliver(messageUpdate(723, "Aku ada bil kena bayar"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Bil apa"), undefined);
+    await deliver(messageUpdate(711, "Bil ShopeePay kena bayar"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Berapa amaun bil ShopeePay"), undefined);
+    await deliver(messageUpdate(712, "RM30"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Bila bil ShopeePay"), undefined);
+    await deliver(messageUpdate(713, "2024-01-31"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("bulanan atau tahunan"), undefined);
+    await deliver(messageUpdate(714, "setiap bulan"));
+    const creation = await telegram.getPendingAction(alice, sender);
+    expect(creation).toMatchObject({ kind: "PROPOSAL", payload: { operation: "create_bill", bill: { name: "ShopeePay", cadence: "MONTHLY", amount: "30.00" } } });
+    expect(await db.prisma.recurringBill.count({ where: { userId: alice } })).toBe(0);
+    await deliver(messageUpdate(715, "ya"));
+    expect(await db.prisma.recurringBill.count({ where: { userId: alice } })).toBe(0);
+    await deliver(callbackUpdate(716, creation!.id));
+    await deliver(callbackUpdate(717, creation!.id));
+    expect(await db.prisma.recurringBill.count({ where: { userId: alice } })).toBe(1);
+    expect(await db.prisma.transaction.count()).toBe(0);
+    await deliver(messageUpdate(718, "bila kena bayar bil shopeepay?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("RM 30.00 pada 2024-01-31"), undefined);
+    await deliver(messageUpdate(719, "/bills"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("2024-01-31 (tertunggak)"), undefined);
+    await deliver(messageUpdate(720, "Aku dah bayar bil shopeepay RM32 semalam"));
+    const payment = await telegram.getPendingAction(alice, sender);
+    expect(payment).toMatchObject({ kind: "PROPOSAL", payload: { operation: "pay_bill", nextDueOn: "2024-01-31", payment: { amount: "32.00" } } });
+    expect(await db.prisma.transaction.count()).toBe(0);
+    await deliver(callbackUpdate(721, payment!.id));
+    await deliver(callbackUpdate(722, payment!.id));
+    const saved = await db.prisma.transaction.findMany();
+    expect(saved.map((row) => [row.userId, row.amount.toFixed(2), row.type, row.source])).toEqual([[alice, "32.00", "EXPENSE", "TELEGRAM"]]);
+    const bill = await db.prisma.recurringBill.findFirstOrThrow({ where: { userId: alice } });
+    expect(bill.nextDueOn.toISOString().slice(0, 10)).toBe("2024-02-29");
+    expect(bill.version).toBe(1);
+  });
+
+  it("keeps planned bills out of spent totals and rejects a stale payment after the web schedule changes", async () => {
+    await connect();
+    await deliver(messageUpdate(730, "Bil telefon RM80 setiap bulan, kena bayar esok"));
+    const action = await telegram.getPendingAction(alice, sender);
+    expect(action).toMatchObject({ kind: "PROPOSAL", payload: { operation: "create_bill", bill: { name: "telefon", amount: "80.00" } } });
+    await deliver(callbackUpdate(731, action!.id));
+    await deliver(messageUpdate(732, "berapa aku spend bulan ni?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("RM 0.00"), undefined);
+    await deliver(messageUpdate(733, "Dah bayar bil telefon"));
+    const payment = await telegram.getPendingAction(alice, sender);
+    expect(payment).toMatchObject({ kind: "PROPOSAL", payload: { operation: "pay_bill" } });
+    await db.prisma.recurringBill.updateMany({ where: { userId: alice }, data: { version: { increment: 1 }, amount: "85" } });
+    await deliver(callbackUpdate(734, payment!.id));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Butiran bil sudah berubah"), undefined);
+    expect(await db.prisma.transaction.count()).toBe(0);
+  });
+
+  it("handles natural bill commands and asks which bill an unnamed payment refers to", async () => {
+    await connect();
+    const today = parseDate(todayInMalaysia());
+    const daysFromToday = (days: number) => {
+      const date = new Date(today);
+      date.setUTCDate(date.getUTCDate() + days);
+      return date;
+    };
+    const [first, later] = [daysFromToday(35), daysFromToday(40)];
+    await db.prisma.recurringBill.createMany({ data: [
+      { userId: alice, categoryId: food, name: "ShopeePay", amount: "25", cadence: "MONTHLY", nextDueOn: first, dayOfMonth: first.getUTCDate() },
+      { userId: alice, categoryId: food, name: "Synthetic later", amount: "50", cadence: "MONTHLY", nextDueOn: later, dayOfMonth: later.getUTCDate() },
+      { userId: alice, categoryId: food, name: "Synthetic overdue", amount: "50", cadence: "MONTHLY", nextDueOn: daysFromToday(-1), dayOfMonth: daysFromToday(-1).getUTCDate() },
+      { userId: alice, categoryId: food, name: "Synthetic paused", amount: "50", cadence: "MONTHLY", nextDueOn: today, dayOfMonth: today.getUTCDate(), active: false },
+      { userId: bob, categoryId: foreignCategory, name: "Synthetic foreign", amount: "999", cadence: "MONTHLY", nextDueOn: today, dayOfMonth: today.getUTCDate() },
+    ] });
+    await deliver(messageUpdate(750, "tambah bil"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Bil apa"), undefined);
+    await deliver(messageUpdate(751, "bil terdekat apa"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining(`Bil terdekat\nBil ShopeePay perlu dibayar RM 25.00 pada ${first.toISOString().slice(0, 10)}`), undefined);
+    expect(await telegram.getPendingAction(alice, sender)).toBeNull();
+
+    await deliver(messageUpdate(756, "kemas kini bil ShopeePay dah dibayar RM24 semalam"));
+    expect(await telegram.getPendingAction(alice, sender)).toMatchObject({
+      kind: "PROPOSAL", payload: { operation: "pay_bill", name: "ShopeePay", payment: { amount: "24.00", occurredOn: daysFromToday(-1).toISOString().slice(0, 10) } },
+    });
+    await deliver(messageUpdate(752, "update bil tu dah dibayar"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Bil mana yang dah dibayar?"), undefined);
+    const paymentQuestion = await telegram.getPendingAction(alice, sender);
+    expect(paymentQuestion).toMatchObject({ kind: "CLARIFICATION", payload: { operation: "pay_bill" } });
+    await deliver(messageUpdate(753, "Synthetic foreign"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("tak jumpa bil aktif"), undefined);
+    expect((await telegram.getPendingAction(alice, sender))?.id).toBe(paymentQuestion?.id);
+
+    await deliver(messageUpdate(754, "ShopeePay"));
+    const proposal = await telegram.getPendingAction(alice, sender);
+    expect(proposal).toMatchObject({ kind: "PROPOSAL", payload: { operation: "pay_bill", name: "ShopeePay", payment: { amount: "25.00" } } });
+    expect(await db.prisma.transaction.count()).toBe(0);
+    await deliver(callbackUpdate(755, proposal!.id));
+    expect(await db.prisma.transaction.findFirst()).toMatchObject({ userId: alice, description: "ShopeePay", type: "EXPENSE", source: "TELEGRAM" });
+    expect(await db.prisma.recurringBill.findFirst({ where: { userId: alice, name: "ShopeePay" } })).toMatchObject({ version: 1 });
   });
 });
 

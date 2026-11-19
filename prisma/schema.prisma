@@ -178,11 +178,15 @@ model RecurringBill {
 }
 
 model TelegramConnection {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  telegramUserId String   @unique @db.VarChar(20)
-  linkedAt       DateTime @default(now()) @db.Timestamptz(3)
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String    @id @default(cuid())
+  userId                String    @unique
+  telegramUserId        String    @unique @db.VarChar(20)
+  linkedAt              DateTime  @default(now()) @db.Timestamptz(3)
+  financeTopic          Json?
+  financeTopicExpiresAt DateTime? @db.Timestamptz(3)
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([financeTopicExpiresAt])
 }
 
 model TelegramLinkToken {

@@ -22,6 +22,7 @@ import { POST } from "../../src/app/api/telegram/webhook/route";
 import { sendMessage } from "../../src/lib/telegram/transport";
 import { DEEPSEEK_MODEL } from "../../src/lib/config/ai";
 import { goldenCases } from "../fixtures/ai-golden";
+import { monthRange, shiftMonth, todayInMalaysia } from "../../src/lib/finance/dates";
 
 const environment = {
   BETTER_AUTH_URL: "http://localhost:3000", BETTER_AUTH_SECRET: "synthetic-ai-secret-at-least-32-characters",
@@ -105,7 +106,7 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
   it("creates a multi-row proposal, saves only on explicit approval, and reuses retries", async () => {
     await connect(); await setAiConsent(alice, true);
     const fixture = goldenCases.find((item) => item.name === "Mixed income and expense")!;
-    const text = "Gaji credited RM2500 from Testname kemudian paid RM15 for lunch";
+    const text = "Gaji credited RM2500 from Testname kemudian paid RM15 for brunch";
     context.parse.mockResolvedValue(JSON.stringify(fixture.output));
     expect((await deliver(message(200, text))).status).toBe(200);
     const pending = await telegram.getPendingAction(alice, sender);
@@ -130,10 +131,10 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
   it("withdrawal and missing credentials prevent future API calls", async () => {
     await connect(); await setAiConsent(alice, true);
     vi.stubEnv("DEEPSEEK_API_KEY", "");
-    await deliver(message(300, "Paid RM12 for lunch"));
+    await deliver(message(300, "Paid RM12 for brunch"));
     vi.stubEnv("DEEPSEEK_API_KEY", environment.DEEPSEEK_API_KEY);
     await setAiConsent(alice, false);
-    await deliver(message(301, "Paid RM14 for lunch"));
+    await deliver(message(301, "Paid RM14 for brunch"));
     expect(context.parse).not.toHaveBeenCalled();
     expect(await db.prisma.rateLimitEvent.count({ where: { bucket: "ai:parse" } })).toBe(0);
   });
@@ -142,16 +143,16 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
     context.parse.mockRejectedValueOnce(new Error("synthetic-sensitive-error"));
     expect((await deliver(message(400, "Buku RM12"))).status).toBe(200);
     context.parse.mockResolvedValueOnce(JSON.stringify({ intent: "save_now", userId: bob, amount: "9999" }));
-    expect((await deliver(message(401, "Paid RM12 for lunch"))).status).toBe(200);
+    expect((await deliver(message(401, "Paid RM12 for brunch"))).status).toBe(200);
     expect(context.parse).toHaveBeenCalledTimes(2);
     expect(await db.prisma.transaction.count()).toBe(0);
-    expect(await db.prisma.pendingTelegramAction.count()).toBe(1);
+    expect(await db.prisma.pendingTelegramAction.count({ where: { consumedAt: null, kind: "CLARIFICATION" } })).toBe(1);
     expect(JSON.stringify(vi.mocked(sendMessage).mock.calls)).not.toContain("synthetic-sensitive-error");
   });
   it("does not dispatch to AI for unlinked or group senders", async () => {
     await setAiConsent(alice, true);
-    await deliver(message(500, "Lunch RM12"));
-    await connect(); await deliver(message(501, "Lunch RM12", sender, "group"));
+    await deliver(message(500, "Brunch RM12"));
+    await connect(); await deliver(message(501, "Brunch RM12", sender, "group"));
     expect(context.parse).not.toHaveBeenCalled();
     await expect(telegram.consumeTelegramAiAttempt(bob, sender, 2, 30)).rejects.toThrow("TELEGRAM_NOT_LINKED");
   });
@@ -161,7 +162,7 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
       await telegram.unlinkTelegram(alice);
       return JSON.stringify(goldenCases[0].output);
     });
-    expect((await deliver(message(600, "Paid RM12 for lunch"))).status).toBe(200);
+    expect((await deliver(message(600, "Paid RM12 for brunch"))).status).toBe(200);
     expect(context.parse).toHaveBeenCalledTimes(1);
     expect(await db.prisma.pendingTelegramAction.count()).toBe(0);
     expect(await db.prisma.transaction.count()).toBe(0);
@@ -173,6 +174,52 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
     expect(sendMessage).toHaveBeenLastCalledWith(sender, "2026-11 · Makanan & Minuman: RM 12.50", undefined);
     expect(context.parse).not.toHaveBeenCalled();
     expect(await db.prisma.pendingTelegramAction.count()).toBe(0);
+  });
+  it("continues a private financial discussion without saving a hypothetical purchase", async () => {
+    await connect(); await connect(bob, bobSender); await setAiConsent(alice, true);
+    const current = todayInMalaysia().slice(0, 7);
+    const previous = shiftMonth(current, -1);
+    const { start } = monthRange(current);
+    await db.prisma.transaction.createMany({ data: [
+      { userId: alice, categoryId: food, type: "EXPENSE", amount: "35", occurredOn: start, description: "Synthetic current", source: "WEB" },
+      { userId: alice, categoryId: food, type: "EXPENSE", amount: "23", occurredOn: monthRange(previous).start, description: "Synthetic prior", source: "WEB" },
+    ] });
+    await db.prisma.budget.create({ data: { userId: alice, categoryId: food, year: start.getUTCFullYear(), month: start.getUTCMonth() + 1, limitAmount: "100" } });
+
+    await deliver(message(710, "Makan RM12"));
+    const original = await telegram.getPendingAction(alice, sender);
+    expect(original?.kind).toBe("PROPOSAL");
+    expect((await deliver(message(711, "Macam mana kewangan aku bulan ni?"))).status).toBe(200);
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Belanja naik RM 12.00"), undefined);
+    await deliver(message(712, "Kalau bulan lepas pula?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining(`Ringkasan kewangan · ${previous}`), undefined);
+    await deliver(message(713, "Ada cadangan?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining(`Ruang untuk berjimat · ${previous}`), undefined);
+    await deliver(message(714, "Apa cadangan untuk berbelanja?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Untuk berjimat, mula dengan semak belian Makanan & Minuman"), undefined);
+    await deliver(message(715, "Trend belanja tiga bulan"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining(`${current} (setakat hari ini) · RM 35.00`), undefined);
+    await deliver(message(716, "Boleh spend RM100 untuk makan?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("bajet akan terlebih RM 35.00"), undefined);
+    await deliver(message(717, "Kalau RM50 pula?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("baki bajet jadi RM 15.00"), undefined);
+    const connection = await db.prisma.telegramConnection.findUniqueOrThrow({ where: { userId: alice } });
+    expect(connection.financeTopic).toEqual({
+      updateId: 717, query: { operation: "purchase_check", period: current, categoryName: "Makanan & Minuman" },
+    });
+    expect(await db.prisma.transaction.count()).toBe(2);
+    expect((await telegram.getPendingAction(alice, sender))?.id).toBe(original?.id);
+    expect(context.parse).not.toHaveBeenCalled();
+
+    await deliver(message(718, "Kalau RM50 pula?", bobSender));
+    expect(sendMessage).toHaveBeenLastCalledWith(bobSender, expect.stringContaining("Sebut soalan penuh"), undefined);
+    await db.prisma.telegramConnection.update({ where: { userId: alice }, data: { financeTopicExpiresAt: new Date(Date.now() - 1_000) } });
+    await deliver(message(719, "Kalau RM50 pula?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Sebut soalan penuh"), undefined);
+    await deliver(message(720, "Analisis kewangan aku bulan ni"));
+    await deliver(message(721, "/cancel"));
+    await telegram.setTelegramFinanceTopic(alice, sender, connection.id, 720, { operation: "analyze_for_period", period: current, focus: "OVERVIEW" });
+    expect(await telegram.getTelegramFinanceTopic(alice, sender, connection.id, 722)).toBeNull();
   });
 });
 
@@ -201,7 +248,7 @@ describe("atomic shared Postgres AI limits", () => {
   });
 });
 
-describe("five fixed financial query operations", () => {
+describe("owner-scoped financial queries", () => {
   beforeEach(async () => {
     await connect();
     const foreign = await db.prisma.category.findFirstOrThrow({ where: { userId: bob, transactionType: "EXPENSE" } });
@@ -227,6 +274,27 @@ describe("five fixed financial query operations", () => {
     expect(await telegram.queryTelegramFinance(alice, sender, { operation: "budget_status", period: "this_month", categoryName: "makan" }, now)).toEqual({ kind: "BUDGET", month: "2026-11", rows: [{ categoryName: "Makanan & Minuman", spent: "12.50", limit: "100.00", remaining: "87.50", percent: "12.50" }] });
     const recent = await telegram.queryTelegramFinance(alice, sender, { operation: "recent_transactions", limit: 2 }, now);
     expect(recent.kind).toBe("RECENT"); if (recent.kind === "RECENT") { expect(recent.rows).toHaveLength(2); expect(JSON.stringify(recent)).not.toContain("Foreign"); }
+  });
+  it("compares the same Malaysian calendar days and reports configured budget warnings", async () => {
+    await db.prisma.transaction.createMany({ data: [
+      { userId: alice, categoryId: food, type: "EXPENSE", amount: "20", occurredOn: new Date("2026-10-01Z"), description: "Synthetic previous day", source: "WEB" },
+      { userId: alice, categoryId: transport, type: "EXPENSE", amount: "150", occurredOn: new Date("2026-11-02Z"), description: "Synthetic future date", source: "WEB" },
+    ] });
+    await db.prisma.budget.create({ data: { userId: alice, categoryId: transport, year: 2026, month: 11, limitAmount: "75", warningAt: 80 } });
+    const analysis = await telegram.queryTelegramFinance(alice, sender, { operation: "analyze_for_period", period: "this_month", focus: "OVERVIEW" }, now);
+    expect(analysis).toMatchObject({
+      kind: "ANALYSIS", month: "2026-11", monthToDate: true, income: "1000.00", expense: "72.50", net: "927.50",
+      previousMonth: "2026-10", previousExpense: "20.00", change: "52.50",
+      top: { name: "Pengangkutan", amount: "60.00" },
+      warnings: [{ categoryName: "Pengangkutan", limit: "75.00", spent: "60.00", remaining: "15.00" }],
+    });
+    expect(await telegram.queryTelegramFinance(alice, sender, { operation: "spending_trend", months: 3, period: "this_month" }, now)).toMatchObject({
+      kind: "TREND", rows: [
+        { month: "2026-09", amount: "0.00", partial: false },
+        { month: "2026-10", amount: "27.20", partial: false },
+        { month: "2026-11", amount: "72.50", partial: true },
+      ],
+    });
   });
   it("rejects unknown operations, extra user IDs, bad ranges and disconnected/foreign senders", async () => {
     for (const input of [{ operation: "sql", sql: "SELECT" }, { operation: "recent_transactions", limit: 11 }, { operation: "net_for_period", period: "2026-13" }, { operation: "recent_transactions", limit: 1, userId: bob }]) await expect(telegram.queryTelegramFinance(alice, sender, input)).rejects.toThrow();

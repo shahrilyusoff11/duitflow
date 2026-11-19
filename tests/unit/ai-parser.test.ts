@@ -9,7 +9,13 @@ const mocks = vi.hoisted(() => ({ consume: vi.fn(), parse: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/telegram/dal", () => ({ consumeTelegramAiAttempt: mocks.consume }));
 vi.mock("@/lib/ai/provider", () => ({ deepseekProvider: () => ({ parse: mocks.parse }) }));
-import { parseWithAi } from "../../src/lib/ai/parser";
+import { parseTransactionWithAi } from "../../src/lib/ai/parser";
+import { parseFinanceQuestion } from "../../src/lib/ai/question";
+
+async function interpretMessage(userId: string, sender: string, text: string, categories: TelegramCategory[], now: Date) {
+  const query = parseFinanceQuestion(text, categories);
+  return query ? { kind: "QUERY" as const, query } : parseTransactionWithAi(userId, sender, text, categories, now);
+}
 
 const categories: TelegramCategory[] = [
   { id: "food", name: "Makanan & Minuman", transactionType: "EXPENSE" },
@@ -30,7 +36,7 @@ afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
 describe(`mocked AI golden set (${goldenCases.length} cases)`, () => {
   it.each(goldenCases)("$name", async (fixture) => {
     mocks.parse.mockResolvedValue(typeof fixture.output === "string" ? fixture.output : JSON.stringify(fixture.output));
-    const result = await parseWithAi("user-synthetic", "12345", fixture.message, categories, now);
+    const result = await interpretMessage("user-synthetic", "12345", fixture.message, categories, now);
     expect(result.kind).toBe(fixture.expected);
     if (result.kind === "PROPOSAL") {
       if (fixture.amounts) expect(result.payload.transactions.map((item) => item.amount)).toEqual(fixture.amounts);
@@ -45,42 +51,42 @@ describe(`mocked AI golden set (${goldenCases.length} cases)`, () => {
 describe("AI availability, privacy and failure boundaries", () => {
   it("sends only allowlisted words and static categories, and handles simple input locally", async () => {
     mocks.parse.mockRejectedValue(new Error("synthetic-secret-output"));
-    await parseWithAi("private-id", "12345", "Makan RM12", categories, now);
+    await parseTransactionWithAi("private-id", "12345", "Makan RM12", categories, now);
     expect(mocks.parse).not.toHaveBeenCalled();
-    await parseWithAi("private-id", "12345", "Paid RM18.92 for lunch with Testname on 2026-11-02", [
+    await parseTransactionWithAi("private-id", "12345", "Paid RM18.92 for brunch with Testname on 2026-11-02", [
       ...categories, { id: "private-category", name: "Private custom label", transactionType: "EXPENSE" },
     ], now);
     const payload = mocks.parse.mock.calls[0][0];
     expect(Object.keys(payload).sort()).toEqual(["categoryNames", "message"]);
-    expect(payload.message).toBe("Item 1: EXPENSE; lunch");
+    expect(payload.message).toBe("Item 1: EXPENSE; brunch");
     for (const value of ["Testname", "18.92", "2026-11-02", "Private custom label", "private-id", "12345"]) expect(JSON.stringify(payload)).not.toContain(value);
     expect(mocks.parse.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
   });
   it.each(["Paid RM12 for coffee user@example.test", "Paid RM12 for coffee bank account", "Paid RM12 for coffee 123456789012", "Paid RM12 for coffee OTP"])("keeps blocked sensitive patterns local", async (message) => {
-    await parseWithAi("u", "1", message, categories, now);
+    await parseTransactionWithAi("u", "1", message, categories, now);
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.parse).not.toHaveBeenCalled();
   });
   it.each(["Show my balance and spending for last month?", "Show 2 or 3 latest transactions", "How much did I spend on food this month and last month?"])("rejects ambiguous questions locally", async (message) => {
-    expect((await parseWithAi("u", "1", message, categories, now)).kind).toBe("UNSUPPORTED");
+    expect((await interpretMessage("u", "1", message, categories, now)).kind).toBe("UNSUPPORTED");
     expect(mocks.parse).not.toHaveBeenCalled();
   });
   it("works with no key and never requests dispatch permission", async () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "");
-    expect((await parseWithAi("u", "12345", "Paid RM12 for lunch", categories, now)).kind).toBe("UNSUPPORTED");
+    expect((await parseTransactionWithAi("u", "12345", "Paid RM12 for brunch", categories, now)).kind).toBe("CLARIFICATION");
     expect(mocks.consume).not.toHaveBeenCalled(); expect(mocks.parse).not.toHaveBeenCalled();
   });
   it.each(["quota", "consent", "database failure"])("falls back when %s denies AI", async (reason) => {
     if (reason === "database failure") mocks.consume.mockRejectedValue(new Error("private-db-details"));
     else mocks.consume.mockResolvedValue(false);
-    expect((await parseWithAi("u", "12345", "Paid RM12 for lunch", categories, now)).kind).toBe("UNSUPPORTED");
+    expect((await parseTransactionWithAi("u", "12345", "Paid RM12 for brunch", categories, now)).kind).toBe("CLARIFICATION");
     expect(mocks.parse).not.toHaveBeenCalled();
   });
   it("bounds a hung provider and aborts it before falling back", async () => {
     vi.useFakeTimers(); mocks.parse.mockReturnValue(new Promise(() => undefined));
-    const result = parseWithAi("u", "12345", "Paid RM12 for lunch", categories, now);
+    const result = parseTransactionWithAi("u", "12345", "Paid RM12 for brunch", categories, now);
     await vi.advanceTimersByTimeAsync(AI_TIMEOUT_MS);
-    expect((await result).kind).toBe("UNSUPPORTED");
+    expect((await result).kind).toBe("CLARIFICATION");
     expect(mocks.parse.mock.calls[0][1].aborted).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
   });

@@ -196,10 +196,30 @@ Settings generates a ten-minute link. Open it in Telegram and enter the bot's
 code in signed-in Settings to activate the connection. Unlinking invalidates
 pending links and proposals. Only linked private-chat users can query records.
 
-Commands: `/start`, `/help`, `/link`, `/balance`, `/budget`, `/report`, `/cancel`.
-Financial commands also accept `YYYY-MM`. Try synthetic messages such as
-`Makan RM12`, `Gaji RM2500`, or `kopi RM8 lepas tu minyak RM40`. Missing details
-prompt clarification. Only **Sahkan** saves; a casual `ya` never writes.
+You can chat in casual Malay and English:
+
+- `Harini aku beli KFC RM20 dan pergi karaoke 30` proposes two expenses in
+  one confirmation.
+- `Aku dapat duit poket daripada abang` asks for the missing amount.
+- `Berapa aku spend bulan ni?` reads the total from your recorded expenses.
+- `Bagi report perbelanjaan aku bulan ni` shows the total and category breakdown.
+- `Analisis kewangan aku bulan ni` summarizes recorded income, spending,
+  budget warnings and how spending changed against the same days last month.
+  Follow with `Kalau bulan lepas?` or `Ada cadangan?`.
+- `Trend belanja tiga bulan` shows monthly spending. `Boleh spend RM100 untuk
+  makan?` checks the effect on the selected category's budget. Follow with
+  `Kalau RM50 pula?` to try a different amount.
+- `Ada bil kena bayar tak?` lists overdue bills and bills due within 30 days.
+- `Bil terdekat apa?` shows the next active bill due today or later.
+- `Bil ShopeePay kena bayar` checks an existing bill or asks for the amount,
+  due date, and monthly or yearly schedule. `Dah bayar bil ShopeePay RM30`
+  proposes an expense and advances the schedule when confirmed.
+  `Update bil tu dah dibayar` asks which bill you paid and accepts the name in
+  your next message.
+
+Only **Sahkan** saves a proposal. Commands include `/start`, `/help`, `/link`,
+`/balance`, `/budget`, `/report`, `/bills`, and `/cancel`. Add `YYYY-MM`
+after `/balance`, `/budget`, or `/report` to choose a month.
 
 Secret checks precede parsing. DONE updates deduplicate; failed/stale leases
 retry; active leases return retryable 503 without duplicate work. Stable action
@@ -214,6 +234,9 @@ enabled. The owner approved metered Flash usage on the existing API account.
 See the [AI setup guide](docs/AI_SETUP.md).
 
 The local parser runs first. Supported financial questions stay on the server.
+The bot keeps the last natural-language monthly question's topic for 10 minutes. Your
+ledger totals, full message and simulated purchase amount stay out of that
+topic. Use `/cancel` to clear it.
 Optional AI suggests categories using app-owned keywords and generic labels.
 The AI caps are 2/minute and 30/24 hours per user, plus 4/minute and 30/24 hours
 across the app. Missing configuration, opt-out, cap, invalid output or timeout

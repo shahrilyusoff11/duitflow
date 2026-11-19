@@ -1,5 +1,37 @@
 # Decisions
 
+## 2026-11-19 — Telegram financial discussion
+
+The owner requested conversational analysis and spending guidance. Use
+recorded income and expenses, category totals, configured budget thresholds
+and prospective budget calculations. For the current month, compare spending
+through today with the same calendar days of the previous month. Historical
+months use their complete ranges. Purchase checks use the selected month's
+recorded category spending and budget.
+
+Keep the latest successful natural-language monthly query's topic on the linked Telegram
+connection for ten minutes. Store validated query parameters so replies can
+reuse the period or category. Omit the prospective amount, message text,
+ledger results and reply text. Expiry, unlink and cancellation prevent
+continued use. These queries run within DuitFlow with the same scoped reads
+as the bot's other financial answers.
+
+## 2026-11-19 — Telegram conversation and recurring bills
+
+Casual Malay and English intake, monthly reports and totals, and bill requests
+use local interpretation. DeepSeek can still suggest
+categories from the existing allowlisted projection for cases the local parser
+cannot categorize. The Settings consent and provider payload policy apply.
+
+Bill creation and payment reuse the existing pending-action store, callback
+protocol and schedule rules. Bill creation collects the amount, due date,
+monthly or yearly cadence, and expense category. Payment proposals bind to an
+active owned bill and its current version and next due date. Approval advances
+the schedule atomically with the expense. A newer pending action or an expired
+clarification cannot be overwritten by a delayed clarification reply.
+An unnamed payment keeps its date and amount in a short-lived clarification.
+The user names the active bill before the bot prepares an approval.
+
 ## 2026-11-18 — Recurring bills
 
 Add monthly and yearly expense schedules in `/bills`. The dashboard uses the

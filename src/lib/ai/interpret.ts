@@ -1,8 +1,7 @@
-import { parseDate, resolveRelativeDate } from "@/lib/finance/dates";
 import { defaultCategories } from "@/lib/finance/default-categories";
-import { finishParse, type ParseResult, type TelegramCategory } from "@/lib/telegram/parser";
+import { finishParse, resolveTransactionDate, type ParseResult, type TelegramCategory } from "@/lib/telegram/parser";
 import type { PartialTransaction } from "@/lib/telegram/schemas";
-import { parseAiOutput, type FinanceQuery } from "./schemas";
+import { parseAiOutput } from "./schemas";
 import type { SourceItem } from "./input";
 
 const normalize = (value: string) => value.toLocaleLowerCase("ms-MY").normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -32,29 +31,25 @@ export function matchCategory(name: string, categories: TelegramCategory[], type
   return close.length === 1 ? close[0] : undefined;
 }
 
-const relative = { today: "today", "hari ini": "today", yesterday: "semalam", semalam: "semalam", kelmarin: "kelmarin", "minggu lepas": "minggu lepas", "last week": "minggu lepas" } as const;
-export function resolveAiDate(expression: string, now: Date) {
-  const value = expression.toLowerCase();
-  return Object.hasOwn(relative, value) ? resolveRelativeDate(relative[value as keyof typeof relative], now) : parseDate(value).toISOString().slice(0, 10);
-}
+export { resolveTransactionDate as resolveAiDate };
 
-export type AiInterpretation = ParseResult | { kind: "QUERY"; query: FinanceQuery };
-
-export function interpretAiOutput(raw: string, items: SourceItem[], categories: TelegramCategory[], now: Date): ParseResult {
+export function interpretAiOutput(raw: string, items: SourceItem[], categories: TelegramCategory[], now: Date, localItems?: PartialTransaction[]): ParseResult {
   const output = parseAiOutput(raw);
-  if (output.intent === "unsupported" || output.transactions.length !== items.length) throw new Error("UNSUPPORTED_AI_INPUT");
+  if (output.intent === "unsupported" || output.transactions.length !== items.length || (localItems && localItems.length !== items.length)) throw new Error("UNSUPPORTED_AI_INPUT");
   const byIndex = new Map(output.transactions.map((item) => [item.sourceIndex, item]));
   const transactions: PartialTransaction[] = items.map((source, index) => {
     const item = byIndex.get(index + 1);
     if (!item || item.type !== source.type) throw new Error("UNGROUNDED_TRANSACTION");
     let occurredOn: string | undefined;
     if (source.dateExpression) {
-      try { occurredOn = resolveAiDate(source.dateExpression, now); } catch { /* Clarify. */ }
+      try { occurredOn = resolveTransactionDate(source.dateExpression, now); } catch { /* Clarify. */ }
     }
     const category = defaultCategories.some((entry) => entry.transactionType === source.type && entry.name === item.categoryName)
       ? categories.find((entry) => entry.transactionType === source.type && entry.name === item.categoryName)
       : undefined;
-    return { type: source.type, description: source.description, amount: source.amount, occurredOn, categoryId: category?.id };
+    const local = localItems?.[index];
+    if (local && local.type !== source.type) throw new Error("UNGROUNDED_TRANSACTION");
+    return local ? { ...local, categoryId: local.categoryId ?? category?.id } : { type: source.type, description: source.description, amount: source.amount, occurredOn, categoryId: category?.id };
   });
   return finishParse(transactions);
 }

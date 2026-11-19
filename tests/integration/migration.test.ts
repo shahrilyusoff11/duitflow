@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 let database: PGlite;
 const migrationRoot = join(process.cwd(), "prisma", "migrations");
 const telegramPrivacyMigration = "20261118000002_telegram_privacy";
+const telegramFinanceTopicMigration = "20261119000000_telegram_finance_topic";
 
 async function applyMigrations(target: PGlite, before?: string) {
   const directories = await readdir(migrationRoot, { withFileTypes: true });
@@ -50,6 +51,21 @@ function insertBudget(categoryId: string, type: string, month = 11) {
 }
 
 describe("reviewed PostgreSQL migrations", () => {
+  it("preserves existing Telegram links when adding optional financial conversation context", async () => {
+    const upgrade = await PGlite.create();
+    try {
+      await applyMigrations(upgrade, telegramFinanceTopicMigration);
+      await upgrade.exec(`
+        INSERT INTO "User" ("id", "name", "email", "updatedAt") VALUES
+          ('existing', 'Existing Test', 'existing@example.test', now());
+        INSERT INTO "TelegramConnection" ("id", "userId", "telegramUserId") VALUES
+          ('existing-link', 'existing', '123456');
+      `);
+      await upgrade.exec(await readFile(join(migrationRoot, telegramFinanceTopicMigration, "migration.sql"), "utf8"));
+      const result = await upgrade.query('SELECT "userId", "telegramUserId", "financeTopic", "financeTopicExpiresAt" FROM "TelegramConnection" WHERE "id" = $1', ["existing-link"]);
+      expect(result.rows).toEqual([{ userId: "existing", telegramUserId: "123456", financeTopic: null, financeTopicExpiresAt: null }]);
+    } finally { await upgrade.close(); }
+  });
   it("clears legacy terminal payloads while preserving active proposals and replay rows", async () => {
     const upgrade = await PGlite.create();
     try {

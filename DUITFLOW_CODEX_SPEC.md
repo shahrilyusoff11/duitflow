@@ -20,7 +20,7 @@
 
 **Core promise:** "Catat belanja melalui chat, pantau bajet melalui dashboard."
 
-**Non-goals for MVP:** bank integrations, real transfers, payments, investments, financial advice, receipt OCR, voice notes, native mobile app, team accounts, multi-currency conversion.
+**Non-goals for MVP:** bank integrations, real transfers, payments, investment, credit or tax recommendations, receipt OCR, voice notes, native mobile app, team accounts, multi-currency conversion. Spending guidance uses the user's recorded expenses and budget limits.
 
 ## 2. Scope tiers
 
@@ -126,14 +126,24 @@ Before writing auth code, check the current status and recommended usage of Auth
   - On a new update: insert as `PROCESSING`. On a duplicate: if `DONE`, ignore; if `PROCESSING` and recently locked, ignore; if `FAILED` or a stale lock, resume/retry.
   - This prevents a timeout during a slow AI call from causing Telegram's retry to be dropped and the user's message to vanish.
 - **Serverless timing:** do not hold the webhook open for slow work. Acknowledge quickly and run AI parsing and replies after responding using the framework-supported post-response mechanism (e.g. Next.js `after()` / Vercel `waitUntil`; verify current availability and limits for Vercel Hobby). Alternatively send an immediate "Sedang memproses…" message, then follow up. Always set a timeout on AI calls and fall back to the deterministic parser on timeout.
-- **Commands:** `/start`, `/help`, `/link`, `/balance`, `/budget`, `/report`, `/cancel`.
+- **Commands:** `/start`, `/help`, `/link`, `/balance`, `/budget`, `/report`, `/bills`, `/cancel`.
 - Only expose financial data after the Telegram identity is linked. Unlinked users get helpful instructions.
 - **Natural-language intake examples:**
   - `Makan nasi ayam RM12`
   - `Tadi beli kopi RM8 lepas tu isi minyak RM40`
+  - `Harini aku beli KFC RM20 dan pergi karaoke 30`
   - `Gaji masuk RM2500`
+  - `Aku dapat duit poket daripada abang`
+  - `Berapa aku spend bulan ni?`
+  - `Bagi report perbelanjaan aku bulan ni`
   - `Berapa aku belanja makan bulan ni?`
   - `Baki bulan ni berapa?`
+- **Recurring bills in chat:** show the linked user's upcoming and overdue bills.
+  The nearest bill query selects the next active due date from today onward.
+  Ask for missing details before proposing a monthly or yearly bill. Ask which
+  bill was paid if the payment message leaves out its name. The payment proposal
+  uses the active bill's expected version and requires approval. Advancing the
+  schedule and writing the expense commit together.
 - **Confirmation:** proposed transactions are **never saved without explicit confirmation** via inline buttons (Sahkan / Batal). Do not interpret a casual "ya" as approval unless it is tied to a specific pending proposal.
   - `callback_data` is limited to **64 bytes**. Put only the **pending action UUID** (and a short action code) in it, never the payload.
   - Always call `answerCallbackQuery` so the button spinner stops.
@@ -170,6 +180,11 @@ Approval must be idempotent under double-taps and replays. Within a single DB tr
   | Operation | Params (Zod) | Result |
   |---|---|---|
   | `net_for_period` | `period` (`this_month`/`last_month`/`YYYY-MM`) | income, expense, net |
+  | `total_for_period` | `period`, transaction `type` | total for the requested direction |
+  | `report_for_period` | `period`, `view` (`EXPENSE`/`FULL`) | recorded spending and category breakdown, with income, net and recent activity in the full view |
+  | `analyze_for_period` | `period`, `focus` (`OVERVIEW`/`SAVINGS`) | recorded totals, comparable prior spending, leading expense category, budget warnings and a spending review suggestion |
+  | `spending_trend` | ending `period`, `months` (2–6) | recorded monthly spending, with the current month through today |
+  | `purchase_check` | `period`, expense `categoryName`, prospective `amount` | effect on the selected category's budget |
   | `spend_by_category` | `period`, `categoryName` | total expense for that category |
   | `top_categories` | `period`, `limit` (1–10) | ranked expense categories |
   | `budget_status` | `period`, optional `categoryName` | limit, spent, remaining, % |
@@ -177,6 +192,12 @@ Approval must be idempotent under double-taps and replays. Within a single DB tr
 
   Unknown category names are fuzzy-matched on the server against that user's categories; if no confident match, ask the user.
 - Answers are rendered from real query results. **Never hallucinate balances.**
+- Monthly questions leave a typed finance topic on the current Telegram
+  connection for 10 minutes so follow-ups can change the month, request a
+  saving suggestion or try another prospective amount. The topic contains the
+  operation and its reusable parameters. Raw messages, measured totals and
+  prospective amounts stay out of the topic. `/cancel` clears it, unlink
+  removes it, and scoped reads enforce expiry before the next reply.
 - **Privacy / AI opt-in:** DeepSeek defaults off per user. The current hardening keeps financial questions, amount/date/description extraction and custom categories local. An opted-in fallback sends only app-owned keywords, locally derived transaction direction and generic categories. Model suggestions must correspond to individual source clauses. Known sensitive input stays local.
 - **Deterministic fallback** handles at least: `Makan RM12`, `Gaji RM2500`, `<description> <amount>`, `/balance`, `/budget`, `/report`. Distinguish "unsupported freeform language" from "parsed successfully" and tell the user which commands/formats still work.
 - **Rate limiting without Redis:** use Postgres buckets for AI attempts, login and new Telegram updates at both sender and project scope where applicable. When AI reaches its cap, keep local handling available.
