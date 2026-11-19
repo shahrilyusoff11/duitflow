@@ -3,14 +3,14 @@ import { todayInMalaysia } from "@/lib/finance/dates";
 import { formatMyr } from "@/lib/finance/money";
 import { monthSchema } from "@/lib/finance/validation";
 import { approvePendingAction, cancelPendingAction, getActionForUpdate, getPendingAction, getTelegramBills, getTelegramBudgets, getTelegramCategories, getTelegramFinanceTopic, getTelegramReport, queryTelegramFinance, redeemLinkToken, replacePendingAction, resolveTelegramUser, setTelegramFinanceTopic, TelegramAccessError } from "./dal";
-import { clarificationQuestion, continueClarification, type TelegramCategory } from "./parser";
+import { clarificationQuestion, continueClarification, parseTelegramText, type TelegramCategory } from "./parser";
 import { answerCallbackQuery, sendMessage } from "./transport";
 import { billClarificationSchema, billPaymentClarificationSchema, pendingClarificationSchema, pendingProposalSchema, transactionSelectionSchema, type BillProposal, type FinanceMutation, type RecordContext } from "./schemas";
-import { billQuestion, continueBillDraft, describeBillProposal, parseBillIntent, prepareBillDraft, readBillNameReply } from "./bills";
+import { billQuestion, continueBillDraft, describeBillProposal, parseBillIntent, prepareBillDraft, readBillNameReply, type BillIntent } from "./bills";
 import type { TelegramUpdate } from "./update";
-import { parseTransactionWithAi } from "@/lib/ai/parser";
-import { continueFinanceTopic, parseFinanceFollowup, parseFinanceQuestion } from "@/lib/ai/question";
-import { financeTopicQuerySchema } from "@/lib/ai/schemas";
+import { interpretTelegramWithAi } from "@/lib/ai/parser";
+import { continueFinanceTopic, parseFinanceFollowup, parseFinanceQuestion, type FinanceFollowup } from "@/lib/ai/question";
+import { financeTopicQuerySchema, type FinanceQuery } from "@/lib/ai/schemas";
 import { renderFinanceAnswer, renderMonthlyReport } from "@/lib/ai/render";
 import { describeFinanceMutation, describeNotifications, notificationChange, notificationHelp, parseBudgetChange, parseLedgerChange, recordReference } from "./finance-tools";
 import { findLedgerRecords, getNotificationSettings, proposeBudget, proposeLedgerChange, readRecordContext, rememberRecords } from "./records";
@@ -345,19 +345,20 @@ async function processMessage(update: TelegramUpdate) {
     else await presentStored(chatId, clarification!, categories, user);
     return;
   }
-  if (asksWhySpendingChanged(chatText)) {
+  const explainSpending = async () => {
     if (clarification) await cancelPendingAction(user.id, telegramUserId, clarification.id);
     const answer = await explainSpendingChange(user.id, telegramUserId, now);
     await replyWithRecords(chatId, answer.text, user, updateId, "transaction", answer.ids);
+  };
+  if (asksWhySpendingChanged(chatText)) {
+    await explainSpending();
     return;
   }
-  const directQuestion = parseFinanceQuestion(chatText, categories);
-  const followup = directQuestion ? null : parseFinanceFollowup(chatText);
-  if (directQuestion || followup) {
+  const answerFinance = async (directQuestion: FinanceQuery | null, followup: FinanceFollowup | null) => {
     const topic = followup ? await getTelegramFinanceTopic(user.id, telegramUserId, user.connectionId, update.update_id, now) : null;
     const question = directQuestion ?? (topic && followup ? continueFinanceTopic(topic, followup) : null);
     if (!question) {
-      await reply(chatId, "Sebut soalan penuh supaya saya tahu apa yang nak disemak. Contohnya ‘Analisis belanja aku bulan lepas’ atau ‘Boleh spend RM50 untuk makan?’");
+      await reply(chatId, "Sebut soalan penuh supaya saya tahu apa yang nak disemak. Nak semak belanja, bajet atau laporan?");
       return;
     }
     if (clarification) await cancelPendingAction(user.id, telegramUserId, clarification.id);
@@ -373,6 +374,11 @@ async function processMessage(update: TelegramUpdate) {
       const records = answer.kind === "RECENT" ? answer.rows : answer.report.recent;
       await replyWithRecords(chatId, content, user, updateId, "transaction", records.map((row) => row.id));
     } else await reply(chatId, content, undefined, user);
+  };
+  const directQuestion = parseFinanceQuestion(chatText, categories);
+  const followup = directQuestion ? null : parseFinanceFollowup(chatText);
+  if (directQuestion || followup) {
+    await answerFinance(directQuestion, followup);
     return;
   }
   const transactionFollowup = clarification ? continueClarification(clarification.payload, chatText, categories) : null;
@@ -415,16 +421,17 @@ async function processMessage(update: TelegramUpdate) {
     } else await reply(chatId, "Saya perlukan rekod yang dimaksudkan. Gunakan /bills atau /report dan pilih nombor daripada senarai.", undefined, user);
     return;
   }
-  const bill = paymentFollowup ?? parseBillIntent(chatText, now);
-  if (bill) {
+  const handleBill = async (bill: BillIntent, continuingPayment = false, fromAi = false) => {
+    const presentBill = (result: Proposed) => fromAi ? presentAi(result)
+      : present(user, chatId, result, categories, updateId, continuingPayment ? clarification?.id : undefined);
     if (bill.kind === "MESSAGE") { await reply(chatId, bill.message); return; }
     if (bill.kind === "PAY") {
       const target = bill.name ? recordReference(bill.name) : null;
       const ids = target && target.kind !== "transaction"
-        ? (paymentFollowup && payState.success ? payState.data.choices : undefined) ?? referenceIds(await contextForChat(), "bill")
+        ? (continuingPayment && payState.success ? payState.data.choices : undefined) ?? referenceIds(await contextForChat(), "bill")
         : [];
       const chosen = target ? chosenId(ids, target) : undefined;
-      if (target?.index != null && !chosen && paymentFollowup) {
+      if (target?.index != null && !chosen && continuingPayment) {
         await presentStored(chatId, clarification!, categories, user);
         return;
       }
@@ -438,14 +445,14 @@ async function processMessage(update: TelegramUpdate) {
           scheduleAfter: match.scheduleAfter,
           payment: { amount: bill.payment.amount ?? match.amount, occurredOn: bill.payment.occurredOn, description: match.name },
         };
-        await present(user, chatId, { kind: "PROPOSAL", payload }, categories, updateId, paymentFollowup ? clarification?.id : undefined);
+        await presentBill({ kind: "PROPOSAL", payload });
       } else if ((!target && bill.name) || chosen) {
         if (matches.length > 1) {
-          await present(user, chatId, { kind: "CLARIFICATION", payload: { operation: "pay_bill", payment: bill.payment, choices: matches.slice(0, 10).map((item) => item.id) } }, categories, updateId, paymentFollowup ? clarification?.id : undefined);
+          await presentBill({ kind: "CLARIFICATION", payload: { operation: "pay_bill", payment: bill.payment, choices: matches.slice(0, 10).map((item) => item.id) } });
         } else await reply(chatId, describeBillLookup([]), undefined, user);
       } else {
         const choices = matches.length ? matches : await getTelegramBills(user.id, telegramUserId, { all: true }, now);
-        await present(user, chatId, { kind: "CLARIFICATION", payload: { operation: "pay_bill", payment: bill.payment, ...(choices.length ? { choices: choices.slice(0, 10).map((item) => item.id) } : {}) } }, categories, updateId, paymentFollowup ? clarification?.id : undefined);
+        await presentBill({ kind: "CLARIFICATION", payload: { operation: "pay_bill", payment: bill.payment, ...(choices.length ? { choices: choices.slice(0, 10).map((item) => item.id) } : {}) } });
       }
       return;
     }
@@ -469,18 +476,46 @@ async function processMessage(update: TelegramUpdate) {
         : describeBillLookup(matches);
       await showBills(matches, response);
     }
+  };
+  const presentAi = async (result: Proposed) => {
+    const stored = await replacePendingAction(user.id, telegramUserId, result.kind, result.payload, updateId, undefined,
+      { connectionId: user.connectionId, pendingId: pending?.id ?? null });
+    if (stored) await presentStored(chatId, stored, categories, user);
+  };
+  const bill = paymentFollowup ?? parseBillIntent(chatText, now);
+  if (bill) {
+    await handleBill(bill, Boolean(paymentFollowup));
     return;
   }
 
+  const local = parseTelegramText(chatText, categories, now);
   // Finish within the webhook lease so a failed delivery remains retryable.
-  await reply(chatId, "Sedang memproses…");
-  const result = await parseTransactionWithAi(user.id, telegramUserId, chatText, categories, now);
-  if (result.kind === "UNSUPPORTED") {
+  let dispatched = false;
+  const intent = await interpretTelegramWithAi(user.id, telegramUserId, user.connectionId, chatText, categories, local, now,
+    () => {
+      dispatched = true;
+      return reply(chatId, "Sedang memproses…", undefined, user);
+    });
+  switch (intent?.kind) {
+    case "FINANCE": await answerFinance(intent.query, null); return;
+    case "FOLLOWUP": await answerFinance(null, intent.followup); return;
+    case "SPENDING_CHANGE": await explainSpending(); return;
+    case "BILL": await handleBill(intent.bill, false, true); return;
+    case "CLARIFY":
+      if (clarification) await presentStored(chatId, clarification, categories, user);
+      else await reply(chatId, "Nak semak belanja, semak bil, atau catat sesuatu? Beritahu satu perkara dulu.", undefined, user);
+      return;
+    case "TRANSACTIONS":
+      if (intent.result.kind !== "UNSUPPORTED") { await presentAi(intent.result); return; }
+      break;
+  }
+  if (local.kind === "UNSUPPORTED") {
     if (clarification) await presentStored(chatId, clarification, categories, user);
-    else await reply(chatId, result.message);
+    else await reply(chatId, local.message);
     return;
   }
-  await present(user, chatId, result, categories, update.update_id);
+  if (dispatched) await presentAi(local);
+  else await present(user, chatId, local, categories, update.update_id);
 }
 
 export async function processTelegramUpdate(update: TelegramUpdate) {

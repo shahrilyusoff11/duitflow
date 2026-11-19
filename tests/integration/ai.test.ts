@@ -22,7 +22,7 @@ import { POST } from "../../src/app/api/telegram/webhook/route";
 import { sendMessage } from "../../src/lib/telegram/transport";
 import { DEEPSEEK_MODEL } from "../../src/lib/config/ai";
 import { goldenCases } from "../fixtures/ai-golden";
-import { monthRange, shiftMonth, todayInMalaysia } from "../../src/lib/finance/dates";
+import { monthRange, parseDate, shiftMonth, todayInMalaysia } from "../../src/lib/finance/dates";
 
 const environment = {
   BETTER_AUTH_URL: "http://localhost:3000", BETTER_AUTH_SECRET: "synthetic-ai-secret-at-least-32-characters",
@@ -44,10 +44,10 @@ async function connect(userId = alice, identity = sender) {
   await db.prisma.telegramConnection.create({ data: { userId, telegramUserId: identity } });
 }
 function consentForm(operation = "enable", consent = true) {
-  const form = new FormData(); form.set("operation", operation); if (consent) form.set("consent", "deepseek"); return form;
+  const form = new FormData(); form.set("operation", operation); if (consent) form.set("consent", "deepseek-chat"); return form;
 }
 const message = (id: number, text: string, identity = sender, type = "private") => ({ update_id: id, message: { message_id: id, from: { id: Number(identity), is_bot: false }, chat: { id: Number(identity), type }, text } });
-const callback = (id: number, actionId: string) => ({ update_id: id, callback_query: { id: `callback-${id}`, from: { id: Number(sender), is_bot: false }, message: { message_id: 1, chat: { id: Number(sender), type: "private" } }, data: `a:${actionId}` } });
+const callback = (id: number, actionId: string, identity = sender) => ({ update_id: id, callback_query: { id: `callback-${id}`, from: { id: Number(identity), is_bot: false }, message: { message_id: 1, chat: { id: Number(identity), type: "private" } }, data: `a:${actionId}` } });
 const deliver = (body: unknown) => POST(new Request("http://localhost/api/telegram/webhook", { method: "POST", headers: { "x-telegram-bot-api-secret-token": environment.TELEGRAM_WEBHOOK_SECRET }, body: JSON.stringify(body) }));
 beforeAll(async () => {
   db = await createTestDatabase();
@@ -70,16 +70,16 @@ afterAll(async () => { await db.close(); vi.unstubAllEnvs(); });
 
 describe("AI consent and authorization with real persisted browser sessions", () => {
   it("defaults off, requires explicit consent and derives the owner from the session", async () => {
-    expect(await getAiSettings(alice)).toEqual({ deepseekParsingEnabled: false, isDemo: false });
+    expect(await getAiSettings(alice)).toEqual({ deepseekChatEnabled: false, isDemo: false });
     expect((await mutateAiConsent({ ok: false, message: "" }, consentForm("enable", false))).ok).toBe(false);
-    const oldForm = consentForm(); oldForm.set("consent", "yes");
+    const oldForm = consentForm(); oldForm.set("consent", "deepseek");
     expect((await mutateAiConsent({ ok: false, message: "" }, oldForm)).ok).toBe(false);
     const form = consentForm(); form.set("userId", bob);
     expect((await mutateAiConsent({ ok: false, message: "" }, form)).ok).toBe(true);
-    expect((await getAiSettings(alice)).deepseekParsingEnabled).toBe(true);
-    expect((await db.prisma.user.findUniqueOrThrow({ where: { id: bob } })).deepseekParsingEnabled).toBe(false);
+    expect((await getAiSettings(alice)).deepseekChatEnabled).toBe(true);
+    expect((await db.prisma.user.findUniqueOrThrow({ where: { id: bob } })).deepseekChatEnabled).toBe(false);
     expect((await mutateAiConsent({ ok: false, message: "" }, consentForm("disable", false))).ok).toBe(true);
-    expect((await getAiSettings(alice)).deepseekParsingEnabled).toBe(false);
+    expect((await getAiSettings(alice)).deepseekChatEnabled).toBe(false);
   });
   it("denies foreign IDs, missing IDs, revoked sessions and demo mutation", async () => {
     await expect(getAiSettings(bob)).rejects.toThrow("FORBIDDEN");
@@ -94,9 +94,10 @@ describe("AI consent and authorization with real persisted browser sessions", ()
 });
 
 describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", () => {
-  it("uses deterministic intake with only legacy Gemini consent, with no API or quota event", async () => {
-    await db.prisma.user.update({ where: { id: alice }, data: { aiParsingEnabled: true } });
+  it("uses deterministic intake with only legacy consent, with no API or quota event", async () => {
+    await db.prisma.user.update({ where: { id: alice }, data: { aiParsingEnabled: true, deepseekParsingEnabled: true } });
     await connect();
+    expect((await deliver(message(99, "Duit aku bocor kat mana bulan ni?"))).status).toBe(200);
     expect((await deliver(message(100, "Makan RM12"))).status).toBe(200);
     expect(context.parse).not.toHaveBeenCalled();
     expect(await db.prisma.rateLimitEvent.count({ where: { bucket: "ai:parse" } })).toBe(0);
@@ -220,6 +221,125 @@ describe("webhook -> mocked AI -> scoped approval -> real Prisma/PostgreSQL", ()
     await deliver(message(721, "/cancel"));
     await telegram.setTelegramFinanceTopic(alice, sender, connection.id, 720, { operation: "analyze_for_period", period: current, focus: "OVERVIEW" });
     expect(await telegram.getTelegramFinanceTopic(alice, sender, connection.id, 722)).toBeNull();
+  });
+});
+
+describe("conversational routing with mocked DeepSeek and disposable PostgreSQL", () => {
+  it("routes both spending questions to the same scoped query and changes month from chat context", async () => {
+    await connect(); await connect(bob, bobSender); await setAiConsent(alice, true);
+    const current = todayInMalaysia().slice(0, 7);
+    const previous = shiftMonth(current, -1);
+    const bobFood = await db.prisma.category.findFirstOrThrow({ where: { userId: bob, name: "Makanan & Minuman" } });
+    await db.prisma.transaction.createMany({ data: [
+      { userId: alice, categoryId: food, type: "EXPENSE", amount: "13.27", occurredOn: monthRange(current).start, description: "Synthetic current" },
+      { userId: alice, categoryId: transport, type: "EXPENSE", amount: "8.19", occurredOn: monthRange(previous).start, description: "Synthetic prior" },
+      { userId: bob, categoryId: bobFood.id, type: "EXPENSE", amount: "9999.99", occurredOn: monthRange(current).start, description: "Synthetic foreign" },
+    ] });
+    context.parse.mockResolvedValueOnce(JSON.stringify({ intent: "finance_query", query: { operation: "top_categories", period: "[MONTH_1]" } }))
+      .mockResolvedValueOnce(JSON.stringify({ intent: "finance_query", query: { operation: "top_categories" } }));
+
+    expect((await deliver(message(800, "Weh, kat mana duit aku lari bulan ni?"))).status).toBe(200);
+    const currentAnswer = vi.mocked(sendMessage).mock.lastCall?.[1];
+    expect(currentAnswer).toContain(current);
+    expect(currentAnswer).toContain("Makanan & Minuman: RM 13.27");
+    expect((await deliver(message(801, "Which kategori makan paling banyak duit aku?"))).status).toBe(200);
+    expect(vi.mocked(sendMessage).mock.lastCall?.[1]).toBe(currentAnswer);
+
+    // Age the AI windows only. This keeps the real ten-minute topic active.
+    await db.prisma.rateLimitEvent.updateMany({ where: { bucket: "ai:parse" }, data: { createdAt: new Date(Date.now() - 61_000) } });
+    context.parse.mockResolvedValueOnce(JSON.stringify({ intent: "follow_up", kind: "PERIOD", value: "[MONTH_1]" }));
+    expect((await deliver(message(802, "What about for the previous month then?"))).status).toBe(200);
+    expect(vi.mocked(sendMessage).mock.lastCall?.[1]).toContain(previous);
+    expect(vi.mocked(sendMessage).mock.lastCall?.[1]).toContain("Pengangkutan: RM 8.19");
+    await deliver(message(803, "kalau bulan lepas?", bobSender));
+    expect(sendMessage).toHaveBeenLastCalledWith(bobSender, expect.stringContaining("Sebut soalan penuh"), undefined);
+    expect(await db.prisma.transaction.count()).toBe(3);
+    expect(context.parse.mock.calls.map(([payload]) => payload.message)).toEqual([
+      "Weh, kat mana duit aku lari [MONTH_1]?", "Which kategori makan paling banyak duit aku?", "What about for the [MONTH_1] then?",
+    ]);
+    expect(JSON.stringify(context.parse.mock.calls)).not.toMatch(/Synthetic|13\.27|8\.19|9999\.99|123456789/);
+    expect(JSON.stringify(vi.mocked(sendMessage).mock.calls)).not.toContain("9,999.99");
+  });
+
+  it("matches masked categories inside the owner's records and keeps foreign names out of the response", async () => {
+    await connect(); await setAiConsent(alice, true);
+    const mine = await db.prisma.category.create({ data: { userId: alice, name: "Private Review", transactionType: "EXPENSE" } });
+    await db.prisma.category.create({ data: { userId: bob, name: "Foreign Label", transactionType: "EXPENSE" } });
+    await db.prisma.transaction.create({ data: { userId: alice, categoryId: mine.id, type: "EXPENSE", amount: "65.11", occurredOn: parseDate(todayInMalaysia()), description: "Synthetic expense" } });
+    context.parse.mockResolvedValue(JSON.stringify({ intent: "finance_query", query: { operation: "spend_by_category", categoryName: "[NAME_1]" } }));
+
+    await deliver(message(810, "How much cash went to Private Review?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Private Review: RM 65.11"), undefined);
+    await deliver(message(811, "How much cash went to Foreign Label?"));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Kategori tidak jelas"), undefined);
+    expect(context.parse.mock.calls.map(([payload]) => payload.message)).toEqual([
+      "How much cash went to [NAME_1]?", "How much cash went to [NAME_1]?",
+    ]);
+  });
+
+  it("resolves a contextual payment, requires a private approval and rejects a stale bill before a fresh replay-safe approval", async () => {
+    await connect(); await connect(bob, bobSender); await setAiConsent(alice, true);
+    const due = parseDate(todayInMalaysia());
+    const mine = await db.prisma.recurringBill.create({ data: {
+      userId: alice, categoryId: food, name: "Synthetic private bill", amount: "42.37", cadence: "MONTHLY",
+      nextDueOn: due, dayOfMonth: due.getUTCDate(),
+    } });
+    context.parse.mockResolvedValue(JSON.stringify({ intent: "pay_bill", target: "context", requiresConfirmation: true }));
+    await deliver(message(820, "/bills"));
+    expect(context.parse).not.toHaveBeenCalled();
+    await deliver(message(821, "I already cleared that bill."));
+    const stale = await telegram.getPendingAction(alice, sender);
+    expect(stale).toMatchObject({ kind: "PROPOSAL", payload: { billId: mine.id, version: 0, payment: { amount: "42.37", occurredOn: todayInMalaysia() } } });
+    expect(vi.mocked(sendMessage).mock.lastCall?.[1]).toContain("RM 42.37");
+    await deliver(message(822, "sahkan"));
+    await deliver(callback(823, stale!.id, bobSender));
+    expect(await db.prisma.transaction.count()).toBe(0);
+    await db.prisma.recurringBill.update({ where: { id: mine.id }, data: { version: { increment: 1 }, amount: "44.53" } });
+    await deliver(callback(824, stale!.id));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Butiran bil sudah berubah"), undefined);
+    expect(await db.prisma.transaction.count()).toBe(0);
+
+    await deliver(message(825, "/bills"));
+    const second = message(826, "I've settled that bill already.");
+    await deliver(second);
+    const fresh = await telegram.getPendingAction(alice, sender);
+    expect(fresh).toMatchObject({ kind: "PROPOSAL", payload: { billId: mine.id, version: 1, payment: { amount: "44.53" } } });
+    const approval = callback(827, fresh!.id);
+    await deliver(approval); await deliver(approval); await deliver(callback(828, fresh!.id)); await deliver(second);
+    const rows = await db.prisma.transaction.findMany();
+    expect(rows.map((row) => [row.userId, row.billId, row.amount.toFixed(2)])).toEqual([[alice, mine.id, "44.53"]]);
+    expect(context.parse.mock.calls.map(([payload]) => payload.message)).toEqual(["I already cleared that bill.", "I've settled that bill already."]);
+  });
+
+  it("asks which bill when the reference matches multiple bills, and keeps the choice local", async () => {
+    await connect(); await setAiConsent(alice, true);
+    const due = parseDate(todayInMalaysia());
+    await db.prisma.recurringBill.createMany({ data: ["Synthetic A", "Synthetic B"].map((name, index) => ({
+      id: "synthetic-bill-" + index, name, userId: alice, categoryId: food, amount: "31.00",
+      cadence: "MONTHLY" as const, nextDueOn: due, dayOfMonth: due.getUTCDate(),
+    })) });
+    context.parse.mockResolvedValue(JSON.stringify({ intent: "pay_bill", target: "context", requiresConfirmation: true }));
+    await deliver(message(830, "/bills"));
+    await deliver(message(831, "I've already settled that bill."));
+    expect(sendMessage).toHaveBeenLastCalledWith(sender, expect.stringContaining("Bil mana yang dah dibayar?"), undefined);
+    expect((await telegram.getPendingAction(alice, sender))?.kind).toBe("CLARIFICATION");
+    await deliver(message(832, "yang kedua"));
+    expect(await telegram.getPendingAction(alice, sender)).toMatchObject({ kind: "PROPOSAL", payload: { billId: "synthetic-bill-1" } });
+    expect(context.parse).toHaveBeenCalledTimes(1);
+    expect(await db.prisma.transaction.count()).toBe(0);
+  });
+
+  it("does not recreate an in-flight AI proposal after the user cancels", async () => {
+    await connect(); await setAiConsent(alice, true);
+    context.parse.mockImplementation(async () => {
+      expect((await deliver(message(841, "/cancel"))).status).toBe(200);
+      return JSON.stringify({ intent: "add_transactions", transactions: [
+        { sourceIndex: 1, type: "EXPENSE", categoryName: "Makanan & Minuman" },
+      ], requiresConfirmation: true });
+    });
+    expect((await deliver(message(840, "Paid RM12 for brunch"))).status).toBe(200);
+    expect(await telegram.getPendingAction(alice, sender)).toBeNull();
+    expect(await db.prisma.transaction.count()).toBe(0);
   });
 });
 

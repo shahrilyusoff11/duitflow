@@ -8,6 +8,60 @@ smoke checks. Approved real auth and synthetic finance/bot writes occurred;
 no schema migration, new application dependency or paid service was introduced in Phase 5.
 The hosted release offers DeepSeek Flash with per-user opt-in.
 
+## DeepSeek Telegram message interpretation — 19 November 2026
+
+- [x] The local parser handles commands, clear messages, clarification replies
+  and Sahkan callbacks. For an unclear message from an opted-in, linked private
+  chat, DeepSeek Flash can choose a finance query, follow-up, bill list or
+  lookup, bill payment proposal, or transaction intake. Provider failure or a
+  reached quota uses local handling.
+- [x] The provider receives recognized Malay and English words in order, with
+  placeholders for names and values, plus generic category labels. DuitFlow
+  keeps the account, placeholder values, chat context, records and answers.
+  It matches actual records, resolves Malaysian dates, validates parameters
+  and uses Decimal arithmetic.
+- [x] The last monthly topic and numbered record references support follow-ups
+  for 10 minutes on the linked chat. Ambiguous payments ask which bill to use.
+  Version checks and atomic Sahkan approvals protect against stale proposals,
+  cross-account callbacks, double taps and webhook redelivery.
+- [x] Tetapan explains the data sent and requires fresh consent. The additive
+  `20261119000002_deepseek_chat_consent` migration defaults off even for
+  earlier category-only opt-ins.
+- [ ] Production migration and deployment require a separate release request.
+
+### Local automated checks
+
+| Check on Windows and Node 26.11.1 | Result |
+| --- | --- |
+| `npm run db:validate` | Passed |
+| `npm run lint` | Passed |
+| `npm run typecheck` | Passed |
+| `npm test` | 379 passed across 17 files |
+| `npm run build` | Passed. Settings and the webhook remain dynamic |
+| `npm run test:e2e` | 36 passed on desktop and mobile Chromium |
+| `git diff --check` | Passed |
+
+Webhook integration tests used mocked DeepSeek and Telegram transport, real
+session checks and disposable PostgreSQL. They cover BM, mixed Malay and
+English, and English phrasing distinct from the model prompt, cross-account
+context and category lookup, consent withdrawal, provider failures,
+cancellation during inference, ambiguous bill selection, stale versions and
+repeat approvals. Migration tests verify default-off consent for an account
+with a prior DeepSeek category opt-in.
+Playwright applied the reviewed migrations to its disposable database and
+verified the signed-in consent notice, enable and disable flows on both
+browser projects.
+
+### Live DeepSeek Flash smoke
+
+The final manual run passed all five synthetic cases in 543–1,170 ms per case,
+within the app's five-second deadline. The BM, mixed-language and English
+spending questions all selected `top_categories`. The month follow-up resolved
+to `last_month` and the installment reference selected a contextual payment
+proposal. This check used the real adapter and local validation outside CI,
+with no database, Telegram delivery or production release. The command is
+recorded in [AI setup](AI_SETUP.md).
+
 ## Telegram finance tools and notifications — 19 November 2026
 
 - [x] Transaction amount edits and undo use the existing Sahkan/Batal

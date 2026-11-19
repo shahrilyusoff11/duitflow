@@ -205,6 +205,9 @@ You can chat in casual Malay and English:
 - `Aku dapat duit poket daripada abang` asks for the missing amount.
 - `Berapa aku spend bulan ni?` reads the total from your recorded expenses.
 - `Bagi report perbelanjaan aku bulan ni` shows the total and category breakdown.
+- With DeepSeek enabled, `Duit aku bocor kat mana bulan ni?` and
+  `Kategori apa paling banyak aku spend?` both show ranked spending categories.
+  Follow with `Kalau bulan lepas?` to see the same answer for the previous month.
 - `Tukar KFC tadi kepada RM25` finds matching transactions dated today in
   Malaysia and previews the old and new amounts. Reply `yang kedua` if the bot
   lists several matches. `Undo catatan terakhir` previews removal of the most
@@ -272,18 +275,24 @@ seconds. Processing finishes before HTTP success; `after()` only cleans up.
 Replies may be uncertain or repeat after a network timeout while writes remain
 idempotent.
 
-DeepSeek consent defaults off, including for users with the legacy preference
-enabled. The owner approved metered Flash usage on the existing API account.
-See the [AI setup guide](docs/AI_SETUP.md).
+Enable **Tafsiran mesej Telegram oleh DeepSeek** in **Tetapan**. It defaults off
+for every account, including prior category-only opt-ins. Clear requests and
+commands run locally. DeepSeek Flash can interpret unclear financial questions,
+follow-ups, bill lookups, completed bill payments and transaction entries.
+It returns a structured function choice. DuitFlow matches records and categories,
+resolves dates in Malaysia, calculates amounts with Decimal and previews any
+proposed change. The Telegram chat keeps recent monthly topics and record
+references for 10 minutes. Use `/cancel` to clear them.
 
-The local parser runs first. Supported financial questions stay on the server.
-The bot keeps the last natural-language monthly question's topic for 10 minutes. Your
-ledger totals, full message and simulated purchase amount stay out of that
-topic. Use `/cancel` to clear it.
-Optional AI suggests categories using app-owned keywords and generic labels.
+DeepSeek receives the order of recognized Malay and English words from the
+current message, placeholders for values and names, and the app's generic
+category labels. DuitFlow retains the placeholder values, account identity,
+chat context, ledger and query results. Messages with recognized sensitive
+patterns use local processing.
 The AI caps are 2/minute and 30/24 hours per user, plus 4/minute and 30/24 hours
 across the app. Missing configuration, opt-out, cap, invalid output or timeout
-uses local handling. See the [mocked golden set](docs/AI_GOLDEN_REPORT.md).
+uses local handling. See the [AI setup guide](docs/AI_SETUP.md) and
+[local verification results](docs/STATUS.md).
 
 ## Checks and evidence
 
@@ -350,15 +359,15 @@ PostgreSQL database.
 
 The Telegram finance tools and notifications are awaiting a separate production
 release approval. Before going live, apply the pending reviewed migrations,
-including `20261119000001_telegram_finance_tools`, configure a server-only
+including `20261119000001_telegram_finance_tools` and
+`20261119000002_deepseek_chat_consent`, configure a server-only
 `CRON_SECRET` in Vercel Production, deploy, and verify the synthetic chat and
 scheduled delivery flows. Vercel does not automatically retry failed cron runs.
 [Implementation status](docs/STATUS.md) · [Vercel cron management](https://vercel.com/docs/schedules/cron-jobs/manage-cron-jobs#error-handling)
 
-Use synthetic portfolio data. Bot messages pass through Telegram. With AI consent
-and activation, DeepSeek receives selected bookkeeping keywords, direction and
-generic category labels. Amounts, dates, descriptions and custom labels stay in
-DuitFlow. No credentials, linking URLs, cookies or
+Use synthetic portfolio data. Bot messages pass through Telegram. See the
+[optional AI disclosure](docs/AI_SETUP.md) for the provider payload. No credentials,
+linking URLs, cookies or
 real financial messages belong in logs, tests, screenshots or Git. Before wider
 use, obtain a security/privacy review and assess Malaysian PDPA obligations.
 This app has no bank connections, payments, transfers or financial advice.

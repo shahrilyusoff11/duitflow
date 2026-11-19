@@ -8,6 +8,7 @@ const migrationRoot = join(process.cwd(), "prisma", "migrations");
 const telegramPrivacyMigration = "20261118000002_telegram_privacy";
 const telegramFinanceTopicMigration = "20261119000000_telegram_finance_topic";
 const telegramFinanceToolsMigration = "20261119000001_telegram_finance_tools";
+const deepseekChatMigration = "20261119000002_deepseek_chat_consent";
 
 async function applyMigrations(target: PGlite, before?: string) {
   const directories = await readdir(migrationRoot, { withFileTypes: true });
@@ -116,8 +117,19 @@ describe("reviewed PostgreSQL migrations", () => {
     } finally { await upgrade.close(); }
   });
   it("defaults AI consent off", async () => {
-    const result = await database.query<{ deepseekParsingEnabled: boolean }>('SELECT "deepseekParsingEnabled" FROM "User" WHERE "id" = $1', ["alice"]);
-    expect(result.rows[0].deepseekParsingEnabled).toBe(false);
+    const result = await database.query('SELECT "deepseekParsingEnabled", "deepseekChatEnabled" FROM "User" WHERE "id" = $1', ["alice"]);
+    expect(result.rows).toEqual([{ deepseekParsingEnabled: false, deepseekChatEnabled: false }]);
+  });
+
+  it("adds a fresh default-off setting for an existing DeepSeek category opt-in", async () => {
+    const upgrade = await PGlite.create();
+    try {
+      await applyMigrations(upgrade, deepseekChatMigration);
+      await upgrade.exec("INSERT INTO \"User\" (\"id\", \"name\", \"email\", \"updatedAt\", \"deepseekParsingEnabled\") VALUES ('legacy-ai', 'Synthetic User', 'legacy-ai@example.test', now(), true)");
+      await upgrade.exec(await readFile(join(migrationRoot, deepseekChatMigration, "migration.sql"), "utf8"));
+      expect((await upgrade.query('SELECT "deepseekParsingEnabled", "deepseekChatEnabled" FROM "User"')).rows)
+        .toEqual([{ deepseekParsingEnabled: true, deepseekChatEnabled: false }]);
+    } finally { await upgrade.close(); }
   });
 
   it("permits equal category names for different users but rejects duplicate defaults for one user", async () => {

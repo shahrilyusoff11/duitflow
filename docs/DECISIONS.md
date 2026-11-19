@@ -1,5 +1,18 @@
 # Decisions
 
+## 2026-11-19 — DeepSeek Telegram message interpretation
+
+Use the local parser first. For low-confidence messages, an opted-in DeepSeek
+request preserves the order of allowlisted conversational vocabulary and masks
+values and unknown names. DeepSeek selects from an enumerated set of existing
+DuitFlow operations. DuitFlow resolves the placeholders and applies the same
+scoped queries, context and approval flow used by local interpretation.
+
+The broader payload requires fresh consent. Add `deepseekChatEnabled` with a
+false default and retain the earlier category-only flag for compatibility.
+Keep the five-second deadline and shared PostgreSQL caps. Test deployment and
+migration separately from local development.
+
 ## 2026-11-19 — Telegram financial discussion
 
 The owner requested conversational analysis and spending guidance. Use

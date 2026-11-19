@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { goldenCases } from "../fixtures/ai-golden";
-import { continueClarification, type TelegramCategory } from "../../src/lib/telegram/parser";
-import { interpretAiOutput, matchCategory, resolveAiDate } from "../../src/lib/ai/interpret";
+import { continueClarification, parseTelegramText, type TelegramCategory } from "../../src/lib/telegram/parser";
+import { interpretAiTransactions, matchCategory, resolveAiDate } from "../../src/lib/ai/interpret";
+import { aiTransactionsSchema } from "../../src/lib/ai/schemas";
 import { prepareAiInput } from "../../src/lib/ai/input";
 import { getAiConfig, DEEPSEEK_MODEL, AI_TIMEOUT_MS, readAiEnvironment } from "../../src/lib/config/ai";
 
@@ -9,12 +10,18 @@ const mocks = vi.hoisted(() => ({ consume: vi.fn(), parse: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/telegram/dal", () => ({ consumeTelegramAiAttempt: mocks.consume }));
 vi.mock("@/lib/ai/provider", () => ({ deepseekProvider: () => ({ parse: mocks.parse }) }));
-import { parseTransactionWithAi } from "../../src/lib/ai/parser";
+import { interpretTelegramWithAi } from "../../src/lib/ai/parser";
 import { parseFinanceQuestion } from "../../src/lib/ai/question";
 
 async function interpretMessage(userId: string, sender: string, text: string, categories: TelegramCategory[], now: Date) {
   const query = parseFinanceQuestion(text, categories);
   return query ? { kind: "QUERY" as const, query } : parseTransactionWithAi(userId, sender, text, categories, now);
+}
+
+async function parseTransactionWithAi(userId: string, sender: string, text: string, categories: TelegramCategory[], now: Date) {
+  const fallback = parseTelegramText(text, categories, now);
+  const result = await interpretTelegramWithAi(userId, sender, "synthetic-connection", text, categories, fallback, now);
+  return result?.kind === "TRANSACTIONS" ? result.result : fallback;
 }
 
 const categories: TelegramCategory[] = [
@@ -49,7 +56,7 @@ describe(`mocked AI golden set (${goldenCases.length} cases)`, () => {
 });
 
 describe("AI availability, privacy and failure boundaries", () => {
-  it("sends only allowlisted words and static categories, and handles simple input locally", async () => {
+  it("preserves safe wording and masks values while handling simple input locally", async () => {
     mocks.parse.mockRejectedValue(new Error("synthetic-secret-output"));
     await parseTransactionWithAi("private-id", "12345", "Makan RM12", categories, now);
     expect(mocks.parse).not.toHaveBeenCalled();
@@ -58,7 +65,7 @@ describe("AI availability, privacy and failure boundaries", () => {
     ], now);
     const payload = mocks.parse.mock.calls[0][0];
     expect(Object.keys(payload).sort()).toEqual(["categoryNames", "message"]);
-    expect(payload.message).toBe("Item 1: EXPENSE; brunch");
+    expect(payload.message).toBe("Paid [AMOUNT_1] for brunch with [NAME_2] on [DATE_3]");
     for (const value of ["Testname", "18.92", "2026-11-02", "Private custom label", "private-id", "12345"]) expect(JSON.stringify(payload)).not.toContain(value);
     expect(mocks.parse.mock.calls[0][1]).toBeInstanceOf(AbortSignal);
   });
@@ -67,9 +74,8 @@ describe("AI availability, privacy and failure boundaries", () => {
     expect(mocks.consume).not.toHaveBeenCalled();
     expect(mocks.parse).not.toHaveBeenCalled();
   });
-  it.each(["Show my balance and spending for last month?", "Show 2 or 3 latest transactions", "How much did I spend on food this month and last month?"])("rejects ambiguous questions locally", async (message) => {
+  it.each(["Show my balance and spending for last month?", "Show 2 or 3 latest transactions", "How much did I spend on food this month and last month?"])("falls back safely on an unclear question", async (message) => {
     expect((await interpretMessage("u", "1", message, categories, now)).kind).toBe("UNSUPPORTED");
-    expect(mocks.parse).not.toHaveBeenCalled();
   });
   it("works with no key and never requests dispatch permission", async () => {
     vi.stubEnv("DEEPSEEK_API_KEY", "");
@@ -96,7 +102,7 @@ describe("AI availability, privacy and failure boundaries", () => {
   });
   it("clarifies an invalid date then accepts only a server-validated reply", () => {
     const fixture = goldenCases.find((item) => item.name === "Invalid date")!;
-    const result = interpretAiOutput(JSON.stringify(fixture.output), prepareAiInput(fixture.message)!.items, categories, now);
+    const result = interpretAiTransactions(aiTransactionsSchema.parse(fixture.output), prepareAiInput(fixture.message)!.items, categories, now);
     expect(result.kind).toBe("CLARIFICATION");
     if (result.kind !== "CLARIFICATION") throw new Error();
     expect(continueClarification(result.payload, "2026-02-30", categories)).toBeNull();
@@ -113,11 +119,11 @@ describe("AI availability, privacy and failure boundaries", () => {
   it("binds one result to each source clause and derives full money phrases locally", () => {
     const input = prepareAiInput("Kopi 50 sen then paid 12 ringgit 50 sen for lunch")!;
     const item = { sourceIndex: 1, type: "EXPENSE", categoryName: "Makanan & Minuman" };
-    const raw = (transactions: object[]) => JSON.stringify({ intent: "add_transactions", transactions, requiresConfirmation: true });
-    expect(() => interpretAiOutput(raw([item, item]), input.items, categories, now)).toThrow("UNGROUNDED_TRANSACTION");
-    expect(() => interpretAiOutput(raw([item, { ...item, sourceIndex: 2, type: "INCOME" }]), input.items, categories, now)).toThrow("UNGROUNDED_TRANSACTION");
-    expect(() => interpretAiOutput(raw([item, { ...item, sourceIndex: 2, amount: "12" }]), input.items, categories, now)).toThrow();
-    expect(interpretAiOutput(raw([{ ...item, sourceIndex: 2 }, item]), input.items, categories, now)).toMatchObject({
+    const parsed = (transactions: object[]) => aiTransactionsSchema.parse({ intent: "add_transactions", transactions, requiresConfirmation: true });
+    expect(() => interpretAiTransactions(parsed([item, item]), input.items, categories, now)).toThrow("UNGROUNDED_TRANSACTION");
+    expect(() => interpretAiTransactions(parsed([item, { ...item, sourceIndex: 2, type: "INCOME" }]), input.items, categories, now)).toThrow("UNGROUNDED_TRANSACTION");
+    expect(() => interpretAiTransactions(parsed([item, { ...item, sourceIndex: 2, amount: "12" }]), input.items, categories, now)).toThrow();
+    expect(interpretAiTransactions(parsed([{ ...item, sourceIndex: 2 }, item]), input.items, categories, now)).toMatchObject({
       kind: "PROPOSAL", payload: { transactions: [{ amount: "0.50" }, { amount: "12.50" }] },
     });
     for (const message of ["Makan − RM12", "Makan RM1 200"]) expect(prepareAiInput(message)?.items[0].amount).toBeUndefined();

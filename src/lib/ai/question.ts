@@ -63,7 +63,7 @@ function parseAnalysisQuestion(subject: string, period: string, categories: Tele
   return null;
 }
 
-type FinanceFollowup = { kind: "PERIOD"; period: string } | { kind: "AMOUNT"; amount: string } | { kind: "SAVINGS" };
+export type FinanceFollowup = { kind: "PERIOD"; period: string } | { kind: "AMOUNT"; amount: string } | { kind: "SAVINGS" };
 
 export function parseFinanceFollowup(text: string): FinanceFollowup | null {
   const reply = text.toLowerCase().trim().replace(/[.?!？]+$/, "").trim();

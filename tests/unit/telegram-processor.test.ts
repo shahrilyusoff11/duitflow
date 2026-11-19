@@ -10,10 +10,7 @@ vi.mock("@/lib/telegram/transport", () => ({
   sendMessage: mock.sendMessage, answerCallbackQuery: mock.answerCallbackQuery,
   TelegramTransportError: class extends Error { constructor(public readonly retryable: boolean) { super("TELEGRAM_DELIVERY_FAILED"); } },
 }));
-vi.mock("@/lib/ai/parser", async () => {
-  const { parseTelegramText } = await import("../../src/lib/telegram/parser");
-  return { parseTransactionWithAi: async (_userId: string, _sender: string, text: string, categories: Parameters<typeof parseTelegramText>[1]) => parseTelegramText(text, categories) };
-});
+vi.mock("@/lib/ai/parser", () => ({ interpretTelegramWithAi: async () => null }));
 
 import { processTelegramUpdate } from "../../src/lib/telegram/processor";
 import { TelegramTransportError } from "../../src/lib/telegram/transport";

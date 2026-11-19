@@ -170,7 +170,7 @@ Approval must be idempotent under double-taps and replays. Within a single DB tr
 
 ### 4.8 AI parsing and financial Q&A
 
-- The backend recognizes supported financial questions and parses transaction amounts and dates. Optional AI suggests a generic category for each numbered transaction clause.
+- The backend handles commands, clear messages and confirmations directly. Optional DeepSeek routes unclear freeform messages to a supported finance query, follow-up, bill lookup or payment proposal, or transaction intake. The backend validates and resolves the selected parameters.
 - Validate `intent`, `transactions[]`, `requiresConfirmation` and query parameters using strict Zod schemas. Reject unknown intents and extra fields.
 - **AI output is untrusted.** The model has no authority to write SQL, choose a user ID, call tools, or save anything. User text and model output are data, never privileged instructions (prompt-injection safe).
 - Multiple purchases in one message → multiple proposed transactions in one approval.
@@ -198,7 +198,7 @@ Approval must be idempotent under double-taps and replays. Within a single DB tr
   operation and its reusable parameters. Raw messages, measured totals and
   prospective amounts stay out of the topic. `/cancel` clears it, unlink
   removes it, and scoped reads enforce expiry before the next reply.
-- **Privacy / AI opt-in:** DeepSeek defaults off per user. The current hardening keeps financial questions, amount/date/description extraction and custom categories local. An opted-in fallback sends only app-owned keywords, locally derived transaction direction and generic categories. Model suggestions must correspond to individual source clauses. Known sensitive input stays local.
+- **Privacy / AI opt-in:** Telegram message interpretation requires fresh DeepSeek consent that defaults off. The provider receives the order of allowlisted words from the current message, placeholders, and generic categories. Placeholder values, account identity, prior chat context, records and answers stay in DuitFlow. Known sensitive input uses local handling.
 - **Deterministic fallback** handles at least: `Makan RM12`, `Gaji RM2500`, `<description> <amount>`, `/balance`, `/budget`, `/report`. Distinguish "unsupported freeform language" from "parsed successfully" and tell the user which commands/formats still work.
 - **Rate limiting without Redis:** use Postgres buckets for AI attempts, login and new Telegram updates at both sender and project scope where applicable. When AI reaches its cap, keep local handling available.
 

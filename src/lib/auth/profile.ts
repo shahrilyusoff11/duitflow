@@ -4,10 +4,10 @@ import { getDatabase } from "@/lib/db";
 
 export async function getUserProfile(userId: string) {
   await requireUser(userId);
-  const { deepseekParsingEnabled, ...profile } = await getDatabase().user.findUniqueOrThrow({
+  const { deepseekChatEnabled, ...profile } = await getDatabase().user.findUniqueOrThrow({
     where: { id: userId },
     select: {
-      id: true, name: true, email: true, deepseekParsingEnabled: true,
+      id: true, name: true, email: true, deepseekChatEnabled: true,
       categories: {
         where: { userId },
         select: { id: true, name: true, transactionType: true },
@@ -15,5 +15,5 @@ export async function getUserProfile(userId: string) {
       },
     },
   });
-  return { ...profile, aiParsingEnabled: deepseekParsingEnabled };
+  return { ...profile, aiParsingEnabled: deepseekChatEnabled };
 }

@@ -119,15 +119,16 @@ export async function getTelegramCategories(userId: string, sender: string) {
   });
 }
 
-export async function consumeTelegramAiAttempt(userId: string, sender: string, minuteLimit: number, dailyLimit: number) {
+export async function consumeTelegramAiAttempt(userId: string, sender: string, minuteLimit: number, dailyLimit: number, connectionId?: string) {
   z.number().int().min(1).max(2).parse(minuteLimit);
   z.number().int().min(1).max(30).parse(dailyLimit);
   return getDatabase().$transaction(async (tx) => {
     // One project lock protects both shared and per-user windows across workers.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('duitflow:ai:quota'))`;
-    await authorizeTelegram(tx, userId, sender);
-    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { deepseekParsingEnabled: true } });
-    if (!user.deepseekParsingEnabled) return false;
+    const connection = await authorizeTelegram(tx, userId, sender);
+    if (connectionId && connection.id !== connectionId) throw new TelegramAccessError();
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { deepseekChatEnabled: true } });
+    if (!user.deepseekChatEnabled) return false;
     const key = createHash("sha256").update(`ai-user:${userId}`).digest("hex");
     const projectKey = createHash("sha256").update("ai-project:deepseek").digest("hex");
     const now = new Date();
@@ -394,19 +395,34 @@ export async function getActionForUpdate(userId: string, sender: string, updateI
   });
 }
 
+type AiProposalGuard = { connectionId: string; pendingId: string | null };
 export function replacePendingAction(userId: string, sender: string, kind: "PROPOSAL" | "CLARIFICATION", input: unknown, updateId?: number): Promise<PendingTelegramAction>;
-export function replacePendingAction(userId: string, sender: string, kind: "PROPOSAL" | "CLARIFICATION", input: unknown, updateId: number, clarificationId: string | undefined): Promise<PendingTelegramAction | null>;
-export async function replacePendingAction(userId: string, sender: string, kind: "PROPOSAL" | "CLARIFICATION", input: unknown, updateId?: number, clarificationId?: string) {
+export function replacePendingAction(userId: string, sender: string, kind: "PROPOSAL" | "CLARIFICATION", input: unknown, updateId: number, clarificationId: string | undefined, aiGuard?: AiProposalGuard): Promise<PendingTelegramAction | null>;
+export async function replacePendingAction(userId: string, sender: string, kind: "PROPOSAL" | "CLARIFICATION", input: unknown, updateId?: number, clarificationId?: string, aiGuard?: AiProposalGuard) {
   const payload = kind === "PROPOSAL" ? pendingProposalSchema.parse(input) : pendingClarificationSchema.parse(input);
   if (clarificationId) actionId.parse(clarificationId);
   const id = updateId === undefined ? undefined : pendingIdForUpdate(sender, updateId);
   return getDatabase().$transaction(async (tx) => {
-    await authorizeTelegram(tx, userId, sender);
+    const connection = await authorizeTelegram(tx, userId, sender);
+    if (aiGuard && connection.id !== aiGuard.connectionId) throw new TelegramAccessError();
     if (id) {
       const existing = await tx.pendingTelegramAction.findFirst({ where: { id, userId, telegramUserId: sender } });
       if (existing) return existing;
     }
     const now = new Date();
+    if (aiGuard && updateId !== undefined) {
+      // A slow interpretation must not replace a newer action or outlive /cancel.
+      const active = await tx.pendingTelegramAction.findFirst({
+        where: { userId, telegramUserId: sender, consumedAt: null, expiresAt: { gt: now } }, select: { id: true },
+      });
+      if ((active?.id ?? null) !== aiGuard.pendingId) return null;
+      const state = await tx.telegramConnection.findUniqueOrThrow({
+        where: { id: connection.id, userId }, select: { financeTopic: true, financeTopicExpiresAt: true },
+      });
+      const topic = financeTopicSchema.safeParse(state.financeTopic);
+      if (state.financeTopicExpiresAt && state.financeTopicExpiresAt > now && topic.success &&
+          topic.data.query === null && topic.data.updateId > updateId) return null;
+    }
     if (clarificationId && !await tx.pendingTelegramAction.findFirst({
       where: { id: clarificationId, userId, telegramUserId: sender, kind: "CLARIFICATION", consumedAt: null, expiresAt: { gt: now } },
       select: { id: true },

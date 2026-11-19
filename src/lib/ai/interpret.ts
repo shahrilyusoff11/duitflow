@@ -1,7 +1,7 @@
 import { defaultCategories } from "@/lib/finance/default-categories";
 import { finishParse, resolveTransactionDate, type ParseResult, type TelegramCategory } from "@/lib/telegram/parser";
 import type { PartialTransaction } from "@/lib/telegram/schemas";
-import { parseAiOutput } from "./schemas";
+import type { AiTransactions } from "./schemas";
 import type { SourceItem } from "./input";
 
 const normalize = (value: string) => value.toLocaleLowerCase("ms-MY").normalize("NFKC").replace(/[^\p{L}\p{N}]+/gu, " ").trim();
@@ -33,9 +33,8 @@ export function matchCategory(name: string, categories: TelegramCategory[], type
 
 export { resolveTransactionDate as resolveAiDate };
 
-export function interpretAiOutput(raw: string, items: SourceItem[], categories: TelegramCategory[], now: Date, localItems?: PartialTransaction[]): ParseResult {
-  const output = parseAiOutput(raw);
-  if (output.intent === "unsupported" || output.transactions.length !== items.length || (localItems && localItems.length !== items.length)) throw new Error("UNSUPPORTED_AI_INPUT");
+export function interpretAiTransactions(output: AiTransactions, items: SourceItem[], categories: TelegramCategory[], now: Date, localItems?: PartialTransaction[]): ParseResult {
+  if (output.transactions.length !== items.length || (localItems && localItems.length !== items.length)) throw new Error("UNSUPPORTED_AI_INPUT");
   const byIndex = new Map(output.transactions.map((item) => [item.sourceIndex, item]));
   const transactions: PartialTransaction[] = items.map((source, index) => {
     const item = byIndex.get(index + 1);
@@ -44,9 +43,8 @@ export function interpretAiOutput(raw: string, items: SourceItem[], categories: 
     if (source.dateExpression) {
       try { occurredOn = resolveTransactionDate(source.dateExpression, now); } catch { /* Clarify. */ }
     }
-    const category = defaultCategories.some((entry) => entry.transactionType === source.type && entry.name === item.categoryName)
-      ? categories.find((entry) => entry.transactionType === source.type && entry.name === item.categoryName)
-      : undefined;
+    const genericMatch = defaultCategories.some((entry) => entry.transactionType === source.type && entry.name === item.categoryName);
+    const category = genericMatch ? categories.find((entry) => entry.transactionType === source.type && entry.name === item.categoryName) : undefined;
     const local = localItems?.[index];
     if (local && local.type !== source.type) throw new Error("UNGROUNDED_TRANSACTION");
     return local ? { ...local, categoryId: local.categoryId ?? category?.id } : { type: source.type, description: source.description, amount: source.amount, occurredOn, categoryId: category?.id };

@@ -40,14 +40,15 @@ export default async function SettingsPage() {
         </dl>
       </section>
       <section className="account-card ai-settings" aria-label="Privasi dan penghuraian AI">
-        <h2>Penghuraian AI pilihan</h2>
-        <p>Persetujuan anda: <strong>{ai.deepseekParsingEnabled ? "Dihidupkan" : "Dimatikan"}</strong>. AI {aiAvailable ? "tersedia" : "belum tersedia; peraturan tempatan digunakan"}.</p>
-        <p>DuitFlow cuba peraturan tempatan dahulu. Jika bantuan diperlukan dan anda bersetuju, DeepSeek Flash menerima kata kunci terpilih, jenis transaksi dan senarai kategori umum. Teks penuh, amaun, tarikh dan nama kategori anda kekal di DuitFlow.</p>
+        <h2>Tafsiran mesej Telegram oleh DeepSeek</h2>
+        <p>Persetujuan anda: <strong>{ai.deepseekChatEnabled ? "Dihidupkan" : "Dimatikan"}</strong>. AI {aiAvailable ? "tersedia" : "belum tersedia; peraturan tempatan digunakan"}.</p>
+        <p>Jika peraturan tempatan kurang pasti dan anda bersetuju, DeepSeek Flash menerima susunan perkataan BM dan Inggeris yang dikenali dalam mesej semasa serta senarai kategori umum. Amaun, tarikh, nama kategori tersuai dan bahagian lain diganti dengan penanda. Mesej dengan corak rahsia atau maklumat bank diproses secara tempatan.</p>
+        <p>DuitFlow memadankan penanda dan menyimpan identiti akaun, konteks chat, rekod kewangan serta hasil carian. Persetujuan ini dimatikan secara lalai, termasuk untuk pengguna yang pernah menghidupkan cadangan kategori DeepSeek.</p>
         <p>DeepSeek menggunakan cache untuk permintaan API. Mesej dan balasan juga disimpan dalam chat awan Telegram. Elakkan maklumat sensitif, termasuk butiran bank.</p>
-        <p>AI boleh tersilap. Semak amaun, tarikh dan kategori. Butang Sahkan menyimpan transaksi. Jawapan kewangan dikira daripada rekod tersimpan. Jika AI gagal atau had dicapai, gunakan Makan RM12, Gaji RM2500, /balance, /budget atau /report.</p>
+        <p>AI memilih fungsi yang sepadan dengan mesej anda. DuitFlow mengira jawapan daripada rekod anda dan menunjukkan butiran cadangan sebelum anda tekan Sahkan. Jika AI gagal atau had dicapai, fungsi tempatan seperti Makan RM12, /bills, /balance, /budget dan /report masih tersedia.</p>
         <p>Mematikan AI menghentikan penghantaran seterusnya. Permintaan yang sudah dihantar tidak boleh ditarik balik.</p>
         <p><a className="text-link" href="https://cdn.deepseek.com/policies/en-US/deepseek-open-platform-terms-of-service.html" target="_blank" rel="noopener noreferrer">Terma API DeepSeek</a> · <a className="text-link" href="https://api-docs.deepseek.com/guides/kv_cache/" target="_blank" rel="noopener noreferrer">Cache API DeepSeek</a></p>
-        <AiSettingsForm enabled={ai.deepseekParsingEnabled} isDemo={ai.isDemo} />
+        <AiSettingsForm enabled={ai.deepseekChatEnabled} isDemo={ai.isDemo} />
       </section>
     </div>
   </>;

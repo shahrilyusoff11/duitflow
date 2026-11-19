@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { deepseekProvider } from "../../src/lib/ai/provider";
 
-const request = { message: "Item 1: EXPENSE; lunch", categoryNames: ["Makanan & Minuman"] };
+const request = { message: "Paid [AMOUNT_1] for lunch", categoryNames: ["Makanan & Minuman"] };
 const fetchMock = vi.fn();
 const response = (message: object = { content: '{"synthetic":true}' }, finishReason = "stop") => new Response(JSON.stringify({
   choices: [{ index: 0, message: { role: "assistant", ...message }, finish_reason: finishReason }],

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { moneySchema, monthSchema } from "@/lib/finance/validation";
+import { genericCategoryNames, referencePattern } from "./input";
 
 const period = z.union([z.enum(["this_month", "last_month"]), monthSchema]);
 const categoryName = z.string().trim().min(1).max(80);
@@ -33,23 +34,43 @@ export const financeTopicSchema = z.object({
 }).strict();
 
 // The model classifies numbered items. User-authored values stay on the server.
-export const aiOutputSchema = z.object({
-  intent: z.enum(["add_transactions", "unsupported"]),
+export const aiTransactionsSchema = z.object({
+  intent: z.literal("add_transactions"),
   transactions: z.array(z.object({
     sourceIndex: z.number().int().min(1).max(10),
     type: z.enum(["INCOME", "EXPENSE"]),
-    categoryName: categoryName.nullable(),
-  }).strict()).max(10),
-  requiresConfirmation: z.boolean(),
-}).strict().superRefine((value, ctx) => {
-  const valid = value.intent === "add_transactions"
-    ? value.requiresConfirmation && value.transactions.length > 0
-    : value.transactions.length === 0 && !value.requiresConfirmation;
-  if (!valid) ctx.addIssue({ code: "custom", message: "INVALID_AI_INTENT" });
-});
+    categoryName: z.enum(genericCategoryNames).nullable(),
+  }).strict()).min(1).max(10),
+  requiresConfirmation: z.literal(true),
+}).strict();
+export type AiTransactions = z.infer<typeof aiTransactionsSchema>;
 
 export const MAX_AI_OUTPUT_BYTES = 20_000;
-export function parseAiOutput(raw: string) {
-  if (Buffer.byteLength(raw, "utf8") > MAX_AI_OUTPUT_BYTES) throw new Error("INVALID_AI_OUTPUT");
-  return aiOutputSchema.parse(JSON.parse(raw));
-}
+
+const reference = z.string().regex(new RegExp("^" + referencePattern.source + "$"));
+const aiCategory = z.union([z.enum(genericCategoryNames), reference]);
+const billTarget = z.union([reference, z.literal("context")]);
+const aiPeriod = reference.optional();
+const aiQuerySchema = z.discriminatedUnion("operation", [
+  analysisQuery.extend({ period: aiPeriod }),
+  trendQuery.extend({ period: aiPeriod, months: reference.optional() }),
+  z.object({ operation: z.literal("net_for_period"), period: aiPeriod }).strict(),
+  z.object({ operation: z.literal("total_for_period"), period: aiPeriod, type: z.enum(["INCOME", "EXPENSE"]) }).strict(),
+  z.object({ operation: z.literal("report_for_period"), period: aiPeriod, view: z.enum(["EXPENSE", "FULL"]) }).strict(),
+  z.object({ operation: z.literal("spend_by_category"), period: aiPeriod, categoryName: aiCategory }).strict(),
+  z.object({ operation: z.literal("top_categories"), period: aiPeriod, limit: reference.optional() }).strict(),
+  z.object({ operation: z.literal("budget_status"), period: aiPeriod, categoryName: aiCategory.optional() }).strict(),
+  purchaseQuery.extend({ period: aiPeriod, categoryName: aiCategory.optional(), amount: reference.optional() }),
+  z.object({ operation: z.literal("recent_transactions"), limit: reference.optional() }).strict(),
+]);
+export const aiChatSchema = z.discriminatedUnion("intent", [
+  aiTransactionsSchema,
+  z.object({ intent: z.literal("finance_query"), query: aiQuerySchema }).strict(),
+  z.object({ intent: z.literal("spending_change") }).strict(),
+  z.object({ intent: z.literal("follow_up"), kind: z.enum(["PERIOD", "AMOUNT", "SAVINGS"]), value: reference.optional() }).strict(),
+  z.object({ intent: z.literal("list_bills"), view: z.enum(["DUE", "NEXT", "NEXT_INSTALLMENT"]) }).strict(),
+  z.object({ intent: z.literal("lookup_bill"), target: billTarget }).strict(),
+  z.object({ intent: z.literal("pay_bill"), target: billTarget.optional(), requiresConfirmation: z.literal(true) }).strict(),
+  z.object({ intent: z.literal("clarify") }).strict(),
+  z.object({ intent: z.literal("unsupported") }).strict(),
+]);

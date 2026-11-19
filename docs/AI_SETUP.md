@@ -28,33 +28,35 @@ AI_MINUTE_LIMIT_PER_USER="2"
 Set `AI_PROVIDER=deterministic` to pause API calls. If the balance runs out,
 DeepSeek returns HTTP 402 and DuitFlow uses the local parser. [DeepSeek API errors](https://api-docs.deepseek.com/quick_start/error_codes/)
 
-Apply the reviewed Prisma migration to the target database before running this
-release. It adds a DeepSeek consent flag that defaults off for all accounts,
-including existing users with the legacy flag set. Run `npm run setup:check` to
-check configuration format, then restart or redeploy and open **Settings →
-Penghuraian AI pilihan** to opt in on an authenticated non-demo account. Consent
-persists independently of availability and can be withdrawn from Settings.
+The reviewed `20261119000002_deepseek_chat_consent` migration adds a flag
+that defaults off for every account. Earlier opt-ins for category suggestions
+remain in the legacy column. After applying the migration to the authorized
+target and running `npm run setup:check`, open **Tetapan → Tafsiran mesej
+Telegram oleh DeepSeek** to opt in with a signed-in account. Consent persists
+independently of availability and can be withdrawn from Tetapan.
 
 ## Runtime boundaries and limits
 
-- The local parser handles complete proposals and known amount or date
-  clarifications first. The bot recognizes supported financial questions locally
-  and renders owner-scoped database results. Unclear requests can use
-  `/balance`, `/report` or `/budget`.
-- Optional category suggestions use a projection of new linked-user messages.
-  DeepSeek sees numbered clauses, locally assigned direction, allowlisted
-  bookkeeping words, and the app's static generic category names. Raw text,
-  custom names, amounts, dates, user IDs, prior requests and query results stay
-  with the application. Common credential, contact and bank patterns bypass AI.
-  The projection still reveals the coarse context of the entry. DeepSeek
-  documents [default API disk caching](https://api-docs.deepseek.com/guides/kv_cache/).
-- Strict bounded Zod schemas reject extra keys, unknown intents, tool calls,
-  partial responses and malformed or oversized output. Each model item must
-  match a unique local clause and direction. Only a generic category suggestion
-  is applied, and only when it matches an owned category of that type. The
-  server reads the amount, date and description from the local clause. Missing
-  or ambiguous fields trigger clarification. Only explicit Sahkan saves rows
-  through the atomic owner-scoped approval transaction.
+- Local interpretation handles commands, callbacks, clear questions, complete
+  proposals, and known clarifications first. When a message needs interpretation,
+  optional DeepSeek selects a supported finance query, follow-up, bill list or
+  lookup, bill payment proposal, or transaction intake. Existing budget changes,
+  edits, undo, bill creation and notification commands are handled locally.
+- The provider payload preserves the order of allowlisted Malay and English
+  words, including ordinary conversational words. Placeholders replace
+  amounts, dates, numbers, custom category names and unrecognized text.
+  The app's static generic category names accompany the message. Common
+  credential, contact and bank patterns bypass AI. The phrasing can reveal the
+  intent of the message. DeepSeek documents its default API disk caching.
+  [DeepSeek context caching](https://api-docs.deepseek.com/guides/kv_cache/)
+- Strict schemas reject unknown choices, extra fields, tool calls, partial
+  responses and unbound or mistyped references. The server maps placeholders
+  from the current message, resolves account scope and Malaysian dates,
+  matches actual records and categories, and computes totals using Decimal.
+  Current and previous topics and numbered records remain local on the linked
+  connection for up to 10 minutes. A bill payment or transaction becomes a
+  preview. The owner-scoped approval checks the bill version and consumes the
+  proposal atomically after the user taps **Sahkan**.
 - Postgres rate events and an advisory transaction lock enforce at most 2 calls
   per rolling minute and 30 per rolling 24 hours per user (configurable downward),
   plus 4/minute and 30/24 hours across the application project. These are local
@@ -82,12 +84,15 @@ retention and processing terms before approving wider real-data use.
 
 ## Verification and rotation
 
-See [the mocked golden-set report](AI_GOLDEN_REPORT.md) and
-[actual check results](STATUS.md). Automated HTTP, integration and browser tests
-use synthetic data, disposable storage and mocked AI. They verify application
-validation and authorization. A direct live Flash smoke returned two synthetic
-expenses in a schema-valid response within the five-second deadline. See the
-status log for deployment and signed-in Telegram verification.
+See the [local check results](STATUS.md). Automated checks use synthetic data,
+disposable PostgreSQL and mocked AI or an explicitly disabled provider.
+The manual check calls the configured Flash adapter with five synthetic
+messages and checks the corresponding server-validated routes. It runs
+outside CI and uses no database or Telegram account.
+
+```sh
+npm exec -- tsx --conditions=react-server --env-file=.env scripts/verify-deepseek-chat.ts
+```
 
 Use only synthetic messages for a live smoke check
 (e.g. `Paid RM8 for breakfast then paid RM40 for petrol`). Review all proposed values, cancel or

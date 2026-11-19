@@ -1,12 +1,12 @@
 import { parseDate, todayInMalaysia } from "@/lib/finance/dates";
 import { formatMyr } from "@/lib/finance/money";
 import { billScheduleLabel } from "@/lib/finance/bill-schedule";
-import type { TelegramCategory } from "./parser";
+import { resolveTransactionDate, type TelegramCategory } from "./parser";
 import { billDraftSchema, billProposalSchema, type BillDraft, type BillPaymentDraft, type BillProposal } from "./schemas";
 import { findChatAmounts, parseChatAmount, unsupportedWrite } from "./text";
 
 const cadencePattern = /\b(?:setiap bulan|tiap(?:-tiap)? bulan|sebulan|bulanan|monthly|setiap tahun|tiap(?:-tiap)? tahun|tahunan|yearly)\b/i;
-const duePattern = /\b(?:\d{4}-\d{2}-\d{2}|harini|hari ni|hari ini|today|esok|tomorrow|semalam|yesterday)\b/i;
+const duePattern = /\b(?:\d{4}-\d{2}-\d{2}|harini|hari ni|hari ini|today|esok|tomorrow|semalam|yesterday|kelmarin)\b/i;
 const billPrefix = /^(?:(?:aku|saya)\s+)?(?:(?:catat|tambah|simpan|rekod|ada|kena bayar|perlu bayar|nak bayar|belum bayar)\s+)?(?:bil|ansuran)\b\s*/i;
 const paidPrefix = /^(?:(?:aku|saya)\s+)?(?:dah|sudah|telah|baru|selesai)\s+bayar\s+(?:bil|ansuran)\b\s*/i;
 const paidStatus = /^(?:(?:update|kemas\s?kini|tandakan|tanda)\s+)?bil(?:\s+(.+?))?\s+(?:dah|sudah|telah)\s+(?:dibayar|bayar)\b(.*)$/i;
@@ -20,7 +20,7 @@ const nextBillPattern = /^(?:(?:(?:apa(?:kah)?|mana|bila|tunjuk(?:kan)?|semak|ba
 const nextInstallmentPattern = /^(?:(?:bila|apa|mana|tunjuk(?:kan)?|semak)\s+)?ansuran\s+(?:seterusnya|terdekat)(?:\s+(?:apa|bila))?\s*[?.!？]*$/i;
 const confidentialText = /@|https?:\/\/|\b(?:otp|kata laluan|password|cvv)\b/i;
 
-type BillIntent =
+export type BillIntent =
   | { kind: "LIST" }
   | { kind: "NEXT"; installmentsOnly?: boolean }
   | { kind: "LOOKUP"; name: string }
@@ -28,16 +28,18 @@ type BillIntent =
   | { kind: "PAY"; name?: string; payment: BillPaymentDraft }
   | { kind: "MESSAGE"; message: string };
 
-function resolveBillDate(text: string, now: Date, payment = false) {
-  const value = text.toLowerCase();
-  const offset = /^(?:esok|tomorrow)$/.test(value) ? 1 : /^(?:semalam|yesterday)$/.test(value) ? -1 : 0;
-  if (payment && offset > 0) return undefined;
+export function resolveBillDate(text: string, now: Date, payment = false) {
   try {
-    const date = parseDate(/^\d/.test(value) ? value : todayInMalaysia(now));
-    date.setUTCDate(date.getUTCDate() + offset);
-    const iso = date.toISOString().slice(0, 10);
-    parseDate(iso);
-    return !payment || iso <= todayInMalaysia(now) ? iso : undefined;
+    const today = todayInMalaysia(now);
+    if (!payment && /^(?:esok|tomorrow)$/i.test(text)) {
+      const date = parseDate(today);
+      date.setUTCDate(date.getUTCDate() + 1);
+      const tomorrow = date.toISOString().slice(0, 10);
+      parseDate(tomorrow);
+      return tomorrow;
+    }
+    const iso = resolveTransactionDate(text, now);
+    return !payment || iso <= today ? iso : undefined;
   } catch { return undefined; }
 }
 

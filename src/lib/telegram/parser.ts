@@ -54,7 +54,7 @@ export function parseTelegramText(text: string, categories: TelegramCategory[], 
   const transactions: PartialTransaction[] = [];
   for (const part of parts) {
     const dates = [...part.matchAll(transactionDatePattern)];
-    if (dates.length > 1 || /\b(esok|tomorrow|minggu depan|next week|last month|bulan lepas|hari tu|the other day|\d{1,2}[/.]\d{1,2}[/.]\d{2,4})\b/i.test(part)) return unsupported();
+    if (dates.length > 1) return unsupported();
     let occurredOn: string;
     try { occurredOn = resolveTransactionDate(dates[0]?.[0] ?? inheritedDate ?? "today", now); }
     catch { return unsupported(); }

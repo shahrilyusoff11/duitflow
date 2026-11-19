@@ -1,0 +1,1 @@
+ALTER TABLE "User" ADD COLUMN "deepseekChatEnabled" BOOLEAN NOT NULL DEFAULT false;
